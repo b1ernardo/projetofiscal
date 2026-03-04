@@ -1,5 +1,8 @@
 # Welcome to your GestaoSystem project
 
+> [!TIP]
+> This project is configured for automatic deployment to Hostinger via GitHub Actions.
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
