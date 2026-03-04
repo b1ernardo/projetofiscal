@@ -40,7 +40,7 @@ function ProtectedRoute({ children, module }: { children: React.ReactNode, modul
       </div>
     );
   }
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="./login" replace />;
 
   if (module && !hasPermission(module)) {
     return <Navigate to="/" replace />;

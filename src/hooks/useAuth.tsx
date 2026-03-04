@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles([]);
     setPermissions([]);
     setProfile(null);
-    window.location.href = '/login';
+    window.location.href = './login';
   };
 
   return (
