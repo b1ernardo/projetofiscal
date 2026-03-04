@@ -1,4 +1,4 @@
-name: Deploy to Hostinger
+name: Deploy to Hostinger via SSH
 
 on:
   push:
@@ -26,27 +26,25 @@ jobs:
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
-      - name: 📂 Sync files to Hostinger
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: 🚀 Deploy Frontend via SSH (Rsync)
+        uses: Burnett01/rsync-deployments@7.0.1
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: dist/
-          server-dir: public_html/gestaosystemweb/
-          dangerous-clean-slate: false
+          switches: -avzr --delete
+          path: dist/
+          remote_path: domains/seudominio.com.br/public_html/gestaosystemweb/
+          remote_host: ${{ secrets.SSH_HOST }}
+          remote_user: ${{ secrets.SSH_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          remote_port: ${{ secrets.SSH_PORT }}
 
-      - name: 📂 Sync API folder to Hostinger
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: 🚀 Deploy API via SSH (Rsync)
+        uses: Burnett01/rsync-deployments@7.0.1
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: api/
-          server-dir: public_html/gestaosystemweb/api/
-          dangerous-clean-slate: false
-          exclude: |
-            **/vendor/**
-            **/config.php
-            **/.env
-            **/*.sql
+          switches: -avzr
+          path: api/
+          remote_path: domains/seudominio.com.br/public_html/gestaosystemweb/api/
+          remote_host: ${{ secrets.SSH_HOST }}
+          remote_user: ${{ secrets.SSH_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          remote_port: ${{ secrets.SSH_PORT }}
+          options: --exclude 'vendor/' --exclude 'config.php' --exclude '*.sql'
