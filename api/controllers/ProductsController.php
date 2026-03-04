@@ -39,6 +39,7 @@ class ProductsController extends ApiController {
         foreach ($products as &$p) {
             $p['boxConfigs'] = $configs_by_product[$p['id']] ?? [];
             $p['sale_price'] = (float)$p['sale_price'];
+            $p['sale_price2'] = isset($p['sale_price2']) ? (float)$p['sale_price2'] : 0.0;
             $p['cost_price'] = (float)$p['cost_price'];
             $p['stock_current'] = (int)$p['stock_current'];
             $p['stock_min'] = (int)$p['stock_min'];
@@ -87,8 +88,8 @@ class ProductsController extends ApiController {
             $ipi_aliquota = isset($data->ipi_aliquota) ? $data->ipi_aliquota : 0.0;
 
             $stmt = $this->conn->prepare("INSERT INTO products 
-                  (id, name, category_id, product_code, code, cost_price, sale_price, stock_current, stock_min, unit, photo_url, active, ncm, cest, cfop_padrao, origem, cst, csosn, pis_cst_entrada, pis_cst_saida, pis_aliquota, cofins_aliquota, ipi_cst, ipi_aliquota) 
-                  VALUES (:id, :name, :category_id, :product_code, :code, :cost_price, :sale_price, :stock_current, :stock_min, :unit, :photo_url, :active, :ncm, :cest, :cfop_padrao, :origem, :cst, :csosn, :pis_cst_entrada, :pis_cst_saida, :pis_aliquota, :cofins_aliquota, :ipi_cst, :ipi_aliquota)");
+                  (id, name, category_id, product_code, code, cost_price, sale_price, sale_price2, stock_current, stock_min, unit, photo_url, active, ncm, cest, cfop_padrao, origem, cst, csosn, pis_cst_entrada, pis_cst_saida, pis_aliquota, cofins_aliquota, ipi_cst, ipi_aliquota) 
+                  VALUES (:id, :name, :category_id, :product_code, :code, :cost_price, :sale_price, :sale_price2, :stock_current, :stock_min, :unit, :photo_url, :active, :ncm, :cest, :cfop_padrao, :origem, :cst, :csosn, :pis_cst_entrada, :pis_cst_saida, :pis_aliquota, :cofins_aliquota, :ipi_cst, :ipi_aliquota)");
             
             $stmt->execute([
                 ":id" => $id,
@@ -98,6 +99,7 @@ class ProductsController extends ApiController {
                 ":code" => $data->code ?? null,
                 ":cost_price" => $data->cost_price ?? 0,
                 ":sale_price" => $data->sale_price,
+                ":sale_price2" => isset($data->sale_price2) ? (float)$data->sale_price2 : 0.0,
                 ":stock_current" => $data->stock_current ?? 0,
                 ":stock_min" => $data->stock_min ?? 0,
                 ":unit" => $data->unit ?? 'UN',
@@ -163,7 +165,7 @@ class ProductsController extends ApiController {
 
             $stmt = $this->conn->prepare("UPDATE products SET 
                   name = :name, category_id = :category_id, product_code = :product_code, code = :code, 
-                  cost_price = :cost_price, sale_price = :sale_price, 
+                  cost_price = :cost_price, sale_price = :sale_price, sale_price2 = :sale_price2, 
                   stock_current = :stock_current, stock_min = :stock_min, 
                   unit = :unit, photo_url = :photo_url, 
                   ncm = :ncm, cest = :cest, cfop_padrao = :cfop_padrao, origem = :origem, 
@@ -181,6 +183,7 @@ class ProductsController extends ApiController {
                 ":code" => $data->code ?? null,
                 ":cost_price" => $data->cost_price ?? 0,
                 ":sale_price" => $data->sale_price,
+                ":sale_price2" => isset($data->sale_price2) ? (float)$data->sale_price2 : 0.0,
                 ":stock_current" => $data->stock_current ?? 0,
                 ":stock_min" => $data->stock_min ?? 0,
                 ":unit" => $data->unit ?? 'un',

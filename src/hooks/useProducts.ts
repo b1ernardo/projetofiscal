@@ -14,6 +14,7 @@ export interface ProductWithBoxConfigs {
   unit: string;
   cost_price: number;
   sale_price: number;
+  sale_price2: number;
   stock_current: number;
   stock_min: number;
   photo_url: string;
@@ -63,6 +64,7 @@ async function fetchProducts(): Promise<ProductWithBoxConfigs[]> {
     unit: p.unit,
     cost_price: Number(p.cost_price),
     sale_price: Number(p.sale_price),
+    sale_price2: p.sale_price2 !== undefined ? Number(p.sale_price2) : 0,
     stock_current: Number(p.stock_current),
     stock_min: Number(p.stock_min),
     photo_url: p.photo_url,
@@ -103,6 +105,7 @@ interface SaveProductData {
   costPrice: number;
   margin: number;
   salePrice: number;
+  salePrice2: number;
   stock: number;
   stockMin: number;
   imageUrl: string;
@@ -141,6 +144,7 @@ export function useSaveProduct() {
         unit: data.unit,
         cost_price: data.costPrice,
         sale_price: data.salePrice,
+        sale_price2: data.salePrice2,
         stock_current: data.stock,
         stock_min: data.stockMin,
         photo_url: data.imageUrl,

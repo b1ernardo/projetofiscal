@@ -18,6 +18,7 @@ interface ProductFormData {
   costPrice: number;
   margin: number;
   salePrice: number;
+  salePrice2: number;
   stock: number;
   stockMin: number;
   imageUrl: string;
@@ -55,6 +56,7 @@ const defaultData: ProductFormData = {
   costPrice: 0,
   margin: 0,
   salePrice: 0,
+  salePrice2: 0,
   stock: 0,
   stockMin: 0,
   imageUrl: "",
@@ -266,7 +268,7 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Custo</Label>
               <Input type="number" step="0.01" value={form.costPrice || ""} onChange={(e) => updateField("costPrice", Number(e.target.value))} />
@@ -276,8 +278,12 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
               <Input type="number" step="0.1" value={form.margin || ""} onChange={(e) => updateField("margin", Number(e.target.value))} />
             </div>
             <div className="space-y-2">
-              <Label>Venda</Label>
+              <Label>Venda (Preço 1)</Label>
               <Input type="number" step="0.01" value={form.salePrice || ""} onChange={(e) => updateField("salePrice", Number(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Preço 2</Label>
+              <Input type="number" step="0.01" value={form.salePrice2 || ""} onChange={(e) => updateField("salePrice2", Number(e.target.value))} />
             </div>
           </div>
 

@@ -66,7 +66,7 @@ export default function Produtos() {
 
   const handleSave = (data: {
     name: string; code: string; category: string; unit: string; costPrice: number; margin: number;
-    salePrice: number; stock: number; stockMin: number; imageUrl: string;
+    salePrice: number; salePrice2: number; stock: number; stockMin: number; imageUrl: string;
     ncm: string; cest: string; cfop_padrao: string; origem: number; cst: string; csosn: string;
     pis_cst_entrada: string; pis_cst_saida: string; pis_aliquota: number; cofins_aliquota: number;
     ipi_cst: string; ipi_aliquota: number;
@@ -106,6 +106,7 @@ export default function Produtos() {
     costPrice: p.cost_price,
     margin: p.cost_price > 0 ? parseFloat(((p.sale_price / p.cost_price - 1) * 100).toFixed(2)) : 0,
     salePrice: p.sale_price,
+    salePrice2: p.sale_price2 ?? 0,
     stock: p.stock_current,
     stockMin: p.stock_min,
     imageUrl: p.photo_url ?? "",
