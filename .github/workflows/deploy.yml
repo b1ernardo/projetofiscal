@@ -33,7 +33,7 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: dist/
-          server-dir: gestaosystemweb/
+          server-dir: public_html/gestaosystemweb/
           dangerous-clean-slate: false
 
       - name: 📂 Sync API to Hostinger
@@ -43,7 +43,7 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: api/
-          server-dir: gestaosystemweb/api/
+          server-dir: public_html/gestaosystemweb/api/
           dangerous-clean-slate: false
           exclude: |
             **/vendor/**
