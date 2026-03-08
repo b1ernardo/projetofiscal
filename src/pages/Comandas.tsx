@@ -113,7 +113,7 @@ export default function Comandas() {
             <p className="text-center text-muted-foreground py-8">Nenhuma comanda encontrada.</p>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:md:grid-cols-3">
             {openComandas.map((c: any) => (
               <Card
                 key={c.id}
@@ -140,8 +140,10 @@ export default function Comandas() {
                       </Button>
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {c.customer_name ?? "Sem cliente"} • Aberta às {format(new Date(c.created_at), "HH:mm")}
+                  <p className="text-sm text-muted-foreground flex flex-wrap gap-x-2">
+                    <span>{c.customer_name ?? "Sem cliente"}</span>
+                    {c.seller_name && <span className="text-primary font-medium">• {c.seller_name}</span>}
+                    <span>• Aberta às {format(new Date(c.created_at), "HH:mm")}</span>
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -159,7 +161,7 @@ export default function Comandas() {
               <h2 className="text-lg font-semibold text-muted-foreground flex items-center gap-2">
                 <CheckCircle className="h-5 w-5" /> Recentemente Fechadas
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:md:grid-cols-3">
                 {closedComandas.slice(0, 6).map((c: any) => (
                   <Card key={c.id} className="opacity-60 bg-muted/30">
                     <CardHeader className="pb-2">
@@ -177,7 +179,10 @@ export default function Comandas() {
                           </Button>
                         </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">{c.customer_name ?? "Sem cliente"}</p>
+                      <div className="text-sm text-muted-foreground flex flex-wrap gap-x-2">
+                        <span>{c.customer_name ?? "Sem cliente"}</span>
+                        {c.seller_name && <span className="text-primary font-medium">• {c.seller_name}</span>}
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="flex justify-between">

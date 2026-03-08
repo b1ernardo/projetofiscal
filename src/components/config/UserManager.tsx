@@ -193,16 +193,20 @@ export function UserManager() {
 
     const moduleLabels: Record<string, string> = {
         dashboard: "Dashboard / Resumo",
-        pdv: "PDV (Vendas)",
-        comandas: "Comandas",
-        produtos: "Produtos",
-        estoque: "Estoque",
-        caixa: "Caixa Financeiro",
-        clientes: "Clientes",
-        fornecedores: "Fornecedores",
-        compras: "Compras / Entrada",
-        relatorios: "Relatórios",
-        configuracoes: "Configurações"
+        pdv: "PDV (Frente de Caixa)",
+        vendas: "Histórico de Vendas",
+        comandas: "Comandas / Restaurante",
+        produtos: "Catálogo de Produtos",
+        estoque: "Gestão de estoque",
+        caixa: "Fluxo de Caixa",
+        contas_pagar: "Contas a Pagar",
+        contas_receber: "Contas a Receber",
+        fiscal: "Fiscal (NF-e/NFC-e)",
+        clientes: "Cadastro de Clientes",
+        fornecedores: "Cadastro de Fornecedores",
+        compras: "Lançamento de Compras",
+        relatorios: "Relatórios do Sistema",
+        configuracoes: "Configurações Gerais"
     };
 
     return (

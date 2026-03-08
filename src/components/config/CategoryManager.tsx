@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCategories, useSaveCategory, useDeleteCategory } from "@/hooks/useCategories";
 
 interface CategoryManagerProps {
   open: boolean;
@@ -12,66 +12,31 @@ interface CategoryManagerProps {
 }
 
 export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [newName, setNewName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const queryClient = useQueryClient();
 
-  const fetchCategories = async () => {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/categories`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-    });
-    if (response.ok) {
-      const data = await response.json();
-      setCategories(data);
-    }
-  };
-
-  useEffect(() => {
-    if (open) fetchCategories();
-  }, [open]);
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["categories"] });
-    queryClient.invalidateQueries({ queryKey: ["products-with-configs"] });
-  };
+  const { data: categories = [], isLoading } = useCategories();
+  const saveCategory = useSaveCategory();
+  const deleteCategoryMutation = useDeleteCategory();
 
   const addCategory = async () => {
     if (!newName.trim()) return;
-    setLoading(true);
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/categories`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
+    saveCategory.mutate(newName.trim(), {
+      onSuccess: () => {
+        toast.success("Categoria adicionada!");
+        setNewName("");
       },
-      body: JSON.stringify({ name: newName.trim() })
+      onError: (err: any) => {
+        toast.error(err.message || "Erro ao adicionar");
+      }
     });
-
-    if (!response.ok) {
-      const err = await response.json();
-      toast.error(err.message || "Erro ao adicionar");
-    } else {
-      toast.success("Categoria adicionada!");
-      setNewName("");
-      fetchCategories();
-      invalidate();
-    }
-    setLoading(false);
   };
 
   const deleteCategory = async (id: string) => {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/categories/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+    deleteCategoryMutation.mutate(id, {
+      onError: (err: any) => {
+        toast.error(err.message);
+      }
     });
-
-    if (!response.ok) {
-      toast.error("Não foi possível remover. Pode haver produtos vinculados.");
-    } else {
-      fetchCategories();
-      invalidate();
-    }
   };
 
   return (
@@ -88,12 +53,16 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addCategory()}
             />
-            <Button onClick={addCategory} disabled={loading} size="icon">
-              <Plus className="h-4 w-4" />
+            <Button onClick={addCategory} disabled={saveCategory.isPending} size="icon">
+              {saveCategory.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             </Button>
           </div>
           <div className="space-y-2 max-h-60 overflow-auto">
-            {categories.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : categories.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">Nenhuma categoria cadastrada</p>
             ) : (
               categories.map((cat) => (

@@ -393,7 +393,7 @@ export default function NovaNFe() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid w-full grid-cols-4">
+                    <TabsList className="grid w-full md:grid-cols-4">
                         <TabsTrigger value="dados">1. Dados da Nota</TabsTrigger>
                         <TabsTrigger value="destinatario">2. Destinatário</TabsTrigger>
                         <TabsTrigger value="produtos">3. Produtos</TabsTrigger>
@@ -406,7 +406,7 @@ export default function NovaNFe() {
                                 <CardTitle>Dados da Nota (Ide)</CardTitle>
                                 <CardDescription>Identificação básica e natureza da operação.</CardDescription>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:md:grid-cols-4 gap-4">
                                 <div className="space-y-2">
                                     <Label>Tipo da Nota</Label>
                                     <Select onValueChange={(v) => setValue("ide.tpNF", v)} defaultValue="1">
@@ -593,7 +593,7 @@ export default function NovaNFe() {
                                     </Popover>
                                 </div>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border-t pt-4">
+                            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:md:grid-cols-3 gap-4 border-t pt-4">
                                 <div className="space-y-2">
                                     <Label className="flex justify-between">
                                         CPF / CNPJ

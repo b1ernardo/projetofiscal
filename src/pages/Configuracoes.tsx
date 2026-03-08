@@ -4,12 +4,41 @@ import { PDVConfig } from "@/components/config/PDVConfig";
 import { UserManager } from "@/components/config/UserManager";
 import { PaymentMethodManager } from "@/components/config/PaymentMethodManager";
 import { ChartOfAccountsManager } from "@/components/config/ChartOfAccountsManager";
+import { DeliveryConfig } from "@/components/config/DeliveryConfig";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { useEffect } from "react";
 
 export default function Configuracoes() {
   const [searchParams] = useSearchParams();
   const tab = searchParams.get("tab");
+  const { hasPermission } = useAuth();
+  const { toast } = useToast();
 
-  if (!tab) {
+  const isTabAllowed = (currentTab: string | null) => {
+    if (!currentTab) return true;
+    switch (currentTab) {
+      case "pdv": return hasPermission("pdv");
+      case "plano-contas":
+      case "pagamentos": return hasPermission("finances");
+      case "delivery": return hasPermission("delivery");
+      case "fiscal": return hasPermission("fiscal");
+      case "usuarios": return true; // Always allow users to see their profile/users if they have user permission
+      default: return true;
+    }
+  };
+
+  useEffect(() => {
+    if (tab && !isTabAllowed(tab)) {
+      toast({
+        title: "Acesso Restrito",
+        description: "Este módulo não está ativo para sua empresa.",
+        variant: "destructive",
+      });
+    }
+  }, [tab]);
+
+  if (!tab || !isTabAllowed(tab)) {
     return <Navigate to="/configuracoes?tab=fiscal" replace />;
   }
 
@@ -25,6 +54,7 @@ export default function Configuracoes() {
       {tab === "pdv" && <div className="max-w-2xl"><PDVConfig /></div>}
       {tab === "plano-contas" && <div className="max-w-4xl"><ChartOfAccountsManager /></div>}
       {tab === "pagamentos" && <div className="max-w-xl"><PaymentMethodManager /></div>}
+      {tab === "delivery" && <div className="max-w-2xl"><DeliveryConfig /></div>}
     </div>
   );
 }

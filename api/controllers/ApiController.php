@@ -3,6 +3,7 @@
 
 class ApiController {
     protected $conn;
+    protected $company_id;
 
     public function __construct($db) {
         $this->conn = $db;
@@ -37,6 +38,7 @@ class ApiController {
             $token = $matches[1];
             $payload = json_decode(base64_decode($token), true);
             if ($payload && isset($payload['id'])) {
+                $this->company_id = $payload['company_id'] ?? null;
                 return $payload;
             }
         }

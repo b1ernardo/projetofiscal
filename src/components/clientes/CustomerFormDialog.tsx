@@ -202,7 +202,7 @@ export function CustomerFormDialog({ open, onOpenChange, onSave, initialData }: 
                         </TabsContent>
 
                         <TabsContent value="endereco" className="space-y-4 mt-4">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 border p-4 rounded-md bg-slate-50 dark:bg-slate-900/50">
+                            <div className="grid grid-cols-2 lg:md:grid-cols-4 gap-4 border p-4 rounded-md bg-slate-50 dark:bg-slate-900/50">
                                 <div className="space-y-2 col-span-2">
                                     <Label htmlFor="cep" className="flex justify-between">
                                         CEP

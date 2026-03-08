@@ -7,8 +7,8 @@ class SuppliersController extends ApiController {
     
     public function list() {
         $this->authenticate();
-        $stmt = $this->conn->prepare("SELECT * FROM suppliers ORDER BY name ASC");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT * FROM suppliers WHERE company_id = :company_id ORDER BY name ASC");
+        $stmt->execute([':company_id' => $this->company_id]);
         $this->jsonResponse($stmt->fetchAll());
     }
 
@@ -22,12 +22,13 @@ class SuppliersController extends ApiController {
         }
 
         $id = generateUUID();
-        $query = "INSERT INTO suppliers (id, name, email, phone, cnpj, address) 
-                  VALUES (:id, :name, :email, :phone, :cnpj, :address)";
+        $query = "INSERT INTO suppliers (id, company_id, name, email, phone, cnpj, address) 
+                  VALUES (:id, :company_id, :name, :email, :phone, :cnpj, :address)";
         
         $stmt = $this->conn->prepare($query);
         $stmt->execute([
             ":id" => $id,
+            ":company_id" => $this->company_id,
             ":name" => $data->name,
             ":email" => $data->email ?? null,
             ":phone" => $data->phone ?? null,

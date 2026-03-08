@@ -9,13 +9,15 @@ class ComandasController extends ApiController {
         $this->authenticate();
         
         $stmt = $this->conn->prepare("
-            SELECT c.*, ci.id as item_id, ci.quantity, ci.unit_price, p.name as product_name
+            SELECT c.*, ci.id as item_id, ci.quantity, ci.unit_price, p.name as product_name, s.name as seller_name
             FROM comandas c 
             LEFT JOIN comanda_items ci ON c.id = ci.comanda_id 
             LEFT JOIN products p ON ci.product_id = p.id
+            LEFT JOIN sellers s ON c.seller_id = s.id
+            WHERE c.company_id = :company_id
             ORDER BY c.created_at DESC
         ");
-        $stmt->execute();
+        $stmt->execute([':company_id' => $this->company_id]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         $comandas = [];
@@ -28,6 +30,8 @@ class ComandasController extends ApiController {
                     'customer_name' => $row['customer_name'],
                     'status' => $row['status'],
                     'created_by' => $row['created_by'],
+                    'seller_id' => $row['seller_id'],
+                    'seller_name' => $row['seller_name'],
                     'created_at' => $row['created_at'],
                     'closed_at' => $row['closed_at'],
                     'items' => []
@@ -50,13 +54,14 @@ class ComandasController extends ApiController {
         $this->authenticate();
         
         $stmt = $this->conn->prepare("
-            SELECT c.*, ci.id as item_id, ci.product_id, ci.quantity, ci.unit_price, p.name as product_name
+            SELECT c.*, ci.id as item_id, ci.product_id, ci.quantity, ci.unit_price, p.name as product_name, s.name as seller_name
             FROM comandas c 
             LEFT JOIN comanda_items ci ON c.id = ci.comanda_id 
             LEFT JOIN products p ON ci.product_id = p.id
-            WHERE c.id = :id
+            LEFT JOIN sellers s ON c.seller_id = s.id
+            WHERE c.id = :id AND c.company_id = :company_id
         ");
-        $stmt->execute([':id' => $id]);
+        $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         if (!$rows) {
@@ -95,11 +100,13 @@ class ComandasController extends ApiController {
         $data = $this->getPostData();
 
         $id = generateUUID();
-        $stmt = $this->conn->prepare("INSERT INTO comandas (id, table_number, customer_name, status, created_by) VALUES (:id, :table, :customer, 'open', :uid)");
+        $stmt = $this->conn->prepare("INSERT INTO comandas (id, company_id, table_number, customer_name, seller_id, status, created_by) VALUES (:id, :company_id, :table, :customer, :seller_id, 'open', :uid)");
         $stmt->execute([
             ":id" => $id,
+            ":company_id" => $this->company_id,
             ":table" => $data->table_number ?? null,
             ":customer" => $data->customer_name ?? null,
+            ":seller_id" => $data->seller_id ?? null,
             ":uid" => $auth['id']
         ]);
 
@@ -110,11 +117,13 @@ class ComandasController extends ApiController {
         $this->authenticate();
         $data = $this->getPostData();
 
-        $stmt = $this->conn->prepare("UPDATE comandas SET table_number = :table, customer_name = :customer WHERE id = :id");
+        $stmt = $this->conn->prepare("UPDATE comandas SET table_number = :table, customer_name = :customer, seller_id = :seller_id WHERE id = :id AND company_id = :company_id");
         $stmt->execute([
             ":id" => $id,
+            ":company_id" => $this->company_id,
             ":table" => $data->table_number ?? null,
-            ":customer" => $data->customer_name ?? null
+            ":customer" => $data->customer_name ?? null,
+            ":seller_id" => $data->seller_id ?? null
         ]);
 
         $this->jsonResponse(["message" => "Comanda atualizada"]);
@@ -129,21 +138,44 @@ class ComandasController extends ApiController {
             $this->jsonResponse(["message" => "Dados incompletos"], 400);
         }
 
-        $stmt = $this->conn->prepare("SELECT id, quantity FROM comanda_items WHERE comanda_id = :cid AND product_id = :pid");
-        $stmt->execute([":cid" => $id, ":pid" => $data->product_id]);
+        $rawProductId = $data->product_id;
+        $productId = substr($rawProductId, 0, 36);
+        
+        $multiplier = 1;
+        $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid AND company_id = :company_id");
+        $bc_stmt->execute([':pid' => $productId, ':company_id' => $this->company_id]);
+        $box_configs = $bc_stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        foreach ($box_configs as $bc) {
+            if (strpos($rawProductId, "-" . $bc['label']) !== false) {
+                $multiplier = (int)$bc['quantity'];
+                break;
+            }
+        }
+
+        // Search for existing item with SAME product AND SAME multiplier
+        $stmt = $this->conn->prepare("SELECT ci.id, ci.quantity FROM comanda_items ci JOIN comandas c ON ci.comanda_id = c.id WHERE ci.comanda_id = :cid AND ci.product_id = :pid AND ci.multiplier = :mult AND c.company_id = :company_id");
+        $stmt->execute([
+            ":cid" => $id, 
+            ":pid" => $productId, 
+            ":mult" => $multiplier,
+            ":company_id" => $this->company_id
+        ]);
         $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($existing) {
             $stmt = $this->conn->prepare("UPDATE comanda_items SET quantity = quantity + :qty WHERE id = :id");
             $stmt->execute([":qty" => $data->quantity, ":id" => $existing['id']]);
         } else {
-            $stmt = $this->conn->prepare("INSERT INTO comanda_items (id, comanda_id, product_id, quantity, unit_price) VALUES (:id, :cid, :pid, :qty, :price)");
+            $stmt = $this->conn->prepare("INSERT INTO comanda_items (id, company_id, comanda_id, product_id, quantity, unit_price, multiplier) VALUES (:id, :company_id, :cid, :pid, :qty, :price, :mult)");
             $stmt->execute([
                 ":id" => generateUUID(),
+                ":company_id" => $this->company_id,
                 ":cid" => $id,
-                ":pid" => $data->product_id,
+                ":pid" => $productId,
                 ":qty" => $data->quantity,
-                ":price" => $data->unit_price
+                ":price" => $data->unit_price,
+                ":mult" => $multiplier
             ]);
         }
 
@@ -162,24 +194,43 @@ class ComandasController extends ApiController {
         try {
             $this->conn->beginTransaction();
             foreach ($data->items as $item) {
-                // Remove SKU suffix if present (from PDV logic)
-                $productId = substr($item->id, 0, 36);
+                $rawProductId = $item->id;
+                $productId = substr($rawProductId, 0, 36);
                 
-                $stmt = $this->conn->prepare("SELECT id FROM comanda_items WHERE comanda_id = :cid AND product_id = :pid");
-                $stmt->execute([":cid" => $id, ":pid" => $productId]);
+                $multiplier = 1;
+                $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid AND company_id = :company_id");
+                $bc_stmt->execute([':pid' => $productId, ':company_id' => $this->company_id]);
+                $box_configs = $bc_stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                foreach ($box_configs as $bc) {
+                    if (strpos($rawProductId, "-" . $bc['label']) !== false) {
+                        $multiplier = (int)$bc['quantity'];
+                        break;
+                    }
+                }
+                
+                $stmt = $this->conn->prepare("SELECT ci.id FROM comanda_items ci JOIN comandas c ON ci.comanda_id = c.id WHERE ci.comanda_id = :cid AND ci.product_id = :pid AND ci.multiplier = :mult AND c.company_id = :company_id");
+                $stmt->execute([
+                    ":cid" => $id, 
+                    ":pid" => $productId, 
+                    ":mult" => $multiplier,
+                    ":company_id" => $this->company_id
+                ]);
                 $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
                 if ($existing) {
                     $stmt = $this->conn->prepare("UPDATE comanda_items SET quantity = quantity + :qty WHERE id = :id");
                     $stmt->execute([":qty" => $item->quantity, ":id" => $existing['id']]);
                 } else {
-                    $stmt = $this->conn->prepare("INSERT INTO comanda_items (id, comanda_id, product_id, quantity, unit_price) VALUES (:id, :cid, :pid, :qty, :price)");
+                    $stmt = $this->conn->prepare("INSERT INTO comanda_items (id, company_id, comanda_id, product_id, quantity, unit_price, multiplier) VALUES (:id, :company_id, :cid, :pid, :qty, :price, :mult)");
                     $stmt->execute([
                         ":id" => generateUUID(),
+                        ":company_id" => $this->company_id,
                         ":cid" => $id,
                         ":pid" => $productId,
                         ":qty" => $item->quantity,
-                        ":price" => $item->price
+                        ":price" => $item->price,
+                        ":mult" => $multiplier
                     ]);
                 }
             }
@@ -193,8 +244,8 @@ class ComandasController extends ApiController {
 
     public function removeItem($itemId) {
         $this->authenticate();
-        $stmt = $this->conn->prepare("DELETE FROM comanda_items WHERE id = :id");
-        $stmt->execute([":id" => $itemId]);
+        $stmt = $this->conn->prepare("DELETE ci FROM comanda_items ci JOIN comandas c ON ci.comanda_id = c.id WHERE ci.id = :id AND c.company_id = :company_id");
+        $stmt->execute([":id" => $itemId, ":company_id" => $this->company_id]);
         $this->jsonResponse(["message" => "Item removido"]);
     }
 
@@ -205,9 +256,18 @@ class ComandasController extends ApiController {
         try {
             $this->conn->beginTransaction();
 
-            // 1. Get comanda items
-            $stmt = $this->conn->prepare("SELECT ci.*, p.name FROM comanda_items ci JOIN products p ON ci.product_id = p.id WHERE ci.comanda_id = :id");
-            $stmt->execute([':id' => $id]);
+            // 0. Get Comanda Header to get seller_id
+            $stmt = $this->conn->prepare("SELECT seller_id, customer_id FROM comandas WHERE id = :id AND company_id = :company_id");
+            $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
+            $comandaData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$comandaData) {
+                throw new Exception("Comanda não encontrada");
+            }
+
+            // 1. Get comanda items (include multiplier)
+            $stmt = $this->conn->prepare("SELECT ci.*, p.name FROM comanda_items ci JOIN products p ON ci.product_id = p.id JOIN comandas c ON ci.comanda_id = c.id WHERE ci.comanda_id = :id AND c.company_id = :company_id");
+            $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
             $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             if (!$items) {
@@ -225,11 +285,13 @@ class ComandasController extends ApiController {
             }
 
             // 2. Create Sale
-            $stmt = $this->conn->prepare("INSERT INTO sales (id, customer_id, total_amount, payment_method, created_by, status) 
-                                          VALUES (:id, :customer_id, :total, :method, :uid, 'completed')");
+            $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, customer_id, seller_id, total_amount, payment_method, created_by, status) 
+                                          VALUES (:id, :company_id, :customer_id, :seller_id, :total, :method, :uid, 'completed')");
             $stmt->execute([
                 ":id" => $saleId,
-                ":customer_id" => $data->customerId ?? null,
+                ":company_id" => $this->company_id,
+                ":customer_id" => $data->customerId ?? $comandaData['customer_id'] ?? null,
+                ":seller_id" => $data->sellerId ?? $comandaData['seller_id'] ?? null,
                 ":total" => $data->total,
                 ":method" => $paymentLabel,
                 ":uid" => $auth['id']
@@ -242,26 +304,35 @@ class ComandasController extends ApiController {
 
             // 3. Sale Items & Stock
             foreach ($items as $item) {
-                $stmt = $this->conn->prepare("INSERT INTO sale_items (id, sale_id, product_id, quantity, unit_price) VALUES (:id, :sid, :pid, :qty, :price)");
+                $multiplier = (int)($item['multiplier'] ?? 1);
+                $totalUnits = $item['quantity'] * $multiplier;
+
+                $stmt = $this->conn->prepare("INSERT INTO sale_items (id, company_id, sale_id, product_id, quantity, unit_price, multiplier) VALUES (:id, :company_id, :sid, :pid, :qty, :price, :mult)");
                 $stmt->execute([
                     ":id" => generateUUID(),
+                    ":company_id" => $this->company_id,
                     ":sid" => $saleId,
                     ":pid" => $item['product_id'],
                     ":qty" => $item['quantity'],
-                    ":price" => $item['unit_price']
+                    ":price" => $item['unit_price'],
+                    ":mult" => $multiplier
                 ]);
 
                 // Stock Current
-                $stmt = $this->conn->prepare("UPDATE products SET stock_current = stock_current - :units WHERE id = :id");
-                $stmt->execute([":units" => $item['quantity'], ":id" => $item['product_id']]);
+                $stmt = $this->conn->prepare("UPDATE products SET stock_current = stock_current - :units WHERE id = :id AND company_id = :company_id");
+                $stmt->execute([":units" => $totalUnits, ":id" => $item['product_id'], ":company_id" => $this->company_id]);
 
                 // Stock Movement
-                $stmt = $this->conn->prepare("INSERT INTO stock_movements (id, product_id, quantity, type, observation, created_by) VALUES (:id, :pid, :qty, 'saida', :obs, :uid)");
+                $obs = "Venda Comanda Mesa #{$saleNumber} - {$item['name']}";
+                if ($multiplier > 1) $obs .= " (Formato x{$multiplier})";
+
+                $stmt = $this->conn->prepare("INSERT INTO stock_movements (id, company_id, product_id, quantity, type, observation, created_by) VALUES (:id, :company_id, :pid, :qty, 'saida', :obs, :uid)");
                 $stmt->execute([
                     ":id" => generateUUID(),
+                    ":company_id" => $this->company_id,
                     ":pid" => $item['product_id'],
-                    ":qty" => $item['quantity'],
-                    ":obs" => "Venda Comanda Mesa #{$saleNumber} - {$item['name']}",
+                    ":qty" => $totalUnits,
+                    ":obs" => $obs,
                     ":uid" => $auth['id']
                 ]);
             }
@@ -269,22 +340,24 @@ class ComandasController extends ApiController {
             // 4. Payments & Cash/Receivable
             if (!empty($data->payments)) {
                 foreach ($data->payments as $p) {
-                    $stmt = $this->conn->prepare("INSERT INTO sale_payments (id, sale_id, method_name, amount) VALUES (:id, :sid, :method, :amount)");
+                    $stmt = $this->conn->prepare("INSERT INTO sale_payments (id, company_id, sale_id, method_name, amount) VALUES (:id, :company_id, :sid, :method, :amount)");
                     $stmt->execute([
                         ":id" => generateUUID(),
+                        ":company_id" => $this->company_id,
                         ":sid" => $saleId,
                         ":method" => $p->methodName,
                         ":amount" => $p->amount
                     ]);
 
                     if (strtolower($p->methodName) !== 'conta') {
-                        $stmtReg = $this->conn->prepare("SELECT id FROM cash_registers WHERE closed_at IS NULL ORDER BY opened_at DESC LIMIT 1");
-                        $stmtReg->execute();
+                        $stmtReg = $this->conn->prepare("SELECT id FROM cash_registers WHERE closed_at IS NULL AND company_id = :company_id ORDER BY opened_at DESC LIMIT 1");
+                        $stmtReg->execute([':company_id' => $this->company_id]);
                         $register = $stmtReg->fetch();
                         if ($register) {
-                            $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, cash_register_id, amount, type, observation, created_by) VALUES (:id, :reg_id, :amount, 'venda', :obs, :uid)");
+                            $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by) VALUES (:id, :company_id, :reg_id, :amount, 'venda', :obs, :uid)");
                             $stmtMove->execute([
                                 ":id" => generateUUID(),
+                                ":company_id" => $this->company_id,
                                 ":reg_id" => $register['id'],
                                 ":amount" => $p->amount,
                                 ":obs" => "Venda Comanda Mesa #{$saleNumber} - " . $p->methodName,
@@ -293,9 +366,10 @@ class ComandasController extends ApiController {
                         }
                     } else {
                         // Accounts Receivable
-                        $stmt = $this->conn->prepare("INSERT INTO accounts_receivable (id, description, customer_id, amount, due_date, status, category) VALUES (:id, :desc, :cust, :amount, :due, 'pending', 'Vendas')");
+                        $stmt = $this->conn->prepare("INSERT INTO accounts_receivable (id, company_id, description, customer_id, amount, due_date, status, category) VALUES (:id, :company_id, :desc, :cust, :amount, :due, 'pending', 'Vendas')");
                         $stmt->execute([
                             ":id" => generateUUID(),
+                            ":company_id" => $this->company_id,
                             ":desc" => "Venda Comanda Mesa #{$saleNumber} (Prazo)",
                             ":cust" => $data->customerId ?? null,
                             ":amount" => $p->amount,
@@ -306,8 +380,8 @@ class ComandasController extends ApiController {
             }
 
             // 5. Close comanda
-            $stmt = $this->conn->prepare("UPDATE comandas SET status = 'closed', closed_at = NOW() WHERE id = :id");
-            $stmt->execute([':id' => $id]);
+            $stmt = $this->conn->prepare("UPDATE comandas SET status = 'closed', closed_at = NOW() WHERE id = :id AND company_id = :company_id");
+            $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
 
             $this->conn->commit();
             $this->jsonResponse(["message" => "Comanda fechada com sucesso", "sale_id" => $saleId]);
@@ -329,11 +403,11 @@ class ComandasController extends ApiController {
             $this->conn->beginTransaction();
 
             // Remove items first (FK constraint)
-            $this->conn->prepare("DELETE FROM comanda_items WHERE comanda_id = :id")->execute([':id' => $id]);
+            $this->conn->prepare("DELETE ci FROM comanda_items ci JOIN comandas c ON ci.comanda_id = c.id WHERE ci.comanda_id = :id AND c.company_id = :company_id")->execute([':id' => $id, ':company_id' => $this->company_id]);
 
             // Remove the comanda itself
-            $stmt = $this->conn->prepare("DELETE FROM comandas WHERE id = :id");
-            $stmt->execute([':id' => $id]);
+            $stmt = $this->conn->prepare("DELETE FROM comandas WHERE id = :id AND company_id = :company_id");
+            $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
 
             if ($stmt->rowCount() === 0) {
                 $this->conn->rollBack();

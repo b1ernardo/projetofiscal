@@ -34,15 +34,12 @@ export default function RelatorioFinanceiro() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/relatorios")}><ArrowLeft className="h-5 w-5" /></Button>
-        <div>
-          <h1 className="text-2xl font-bold">Relatório Financeiro</h1>
-          <p className="text-muted-foreground">Receitas vs despesas e fluxo de caixa</p>
-        </div>
+      <div className="flex flex-col gap-1 pb-4">
+        <h3 className="text-xl font-bold">Relatório Financeiro</h3>
+        <p className="text-sm text-muted-foreground">Receitas vs despesas e fluxo de caixa</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:md:grid-cols-4">
         <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10 text-success"><TrendingUp className="h-5 w-5" /></div><div><p className="text-xs text-muted-foreground">Receita Total</p><p className="text-lg font-bold">{formatCurrency(totalReceita)}</p></div></CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive"><TrendingDown className="h-5 w-5" /></div><div><p className="text-xs text-muted-foreground">Despesa Total</p><p className="text-lg font-bold">{formatCurrency(totalDespesa)}</p></div></CardContent></Card>
         <Card><CardContent className="flex items-center gap-3 p-4"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><DollarSign className="h-5 w-5" /></div><div><p className="text-xs text-muted-foreground">Lucro Líquido</p><p className={`text-lg font-bold ${lucro >= 0 ? "text-success" : "text-destructive"}`}>{formatCurrency(lucro)}</p></div></CardContent></Card>

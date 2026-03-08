@@ -12,16 +12,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Check, ChevronsUpDown, Package, Users, Save, CheckCircle, XCircle } from "lucide-react";
+import { Check, ChevronsUpDown, Package, Users, Save, CheckCircle, XCircle, User } from "lucide-react";
+import { useSellers } from "@/hooks/useSellers";
 import { useProducts } from "@/hooks/useProducts";
-import { useCustomers } from "@/hooks/useCustomers";
+import { useCustomers, useAddCustomer } from "@/hooks/useCustomers";
+import { useSaveProduct } from "@/hooks/useProducts";
 import { useSaveSale } from "@/hooks/useSaveSale";
 import { useAuth } from "@/hooks/useAuth";
+import { useQueryClient } from "@tanstack/react-query";
 import { CustomerFormDialog } from "@/components/clientes/CustomerFormDialog";
 import { printReceipt, getWhatsappUrl } from "@/utils/printReceipt";
 import { ProductFormDialog } from "@/components/produtos/ProductFormDialog";
 import { CheckoutDialog } from "@/components/pdv/CheckoutDialog";
 import { ReceiptOptionsDialog } from "@/components/pdv/ReceiptOptionsDialog";
+import { SaleFormatDialog } from "@/components/pdv/SaleFormatDialog";
 import { useFiscal } from "@/hooks/useFiscal";
 import { cn } from "@/lib/utils";
 
@@ -30,10 +34,15 @@ export default function NovaVenda() {
     const { user } = useAuth();
     const { data: products = [] } = useProducts();
     const { data: customersList = [] } = useCustomers();
+    const { data: sellers = [] } = useSellers();
     const saveSale = useSaveSale();
     const emitFiscal = useFiscal();
+    const queryClient = useQueryClient();
+    const addCustomerMutation = useAddCustomer();
+    const saveProductMutation = useSaveProduct();
 
     const [openCustomerSearch, setOpenCustomerSearch] = useState(false);
+    const [openSellerSearch, setOpenSellerSearch] = useState(false);
     const [openProductSearch, setOpenProductSearch] = useState(false);
     const [productSearchTerm, setProductSearchTerm] = useState("");
 
@@ -53,10 +62,14 @@ export default function NovaVenda() {
     const [selectedProduct, setSelectedProduct] = useState<any>(null);
     const [itemQtd, setItemQtd] = useState<number>(1);
     const [itemPrice, setItemPrice] = useState<number>(0);
+    const [selectedPriceType, setSelectedPriceType] = useState<1 | 2>(1);
 
     const [items, setItems] = useState<any[]>([]);
     const [desconto, setDesconto] = useState<number>(0);
     const [acrescimo, setAcrescimo] = useState<number>(0);
+
+    const [formatDialogProduct, setFormatDialogProduct] = useState<any>(null);
+    const [formatDialogPendingQty, setFormatDialogPendingQty] = useState<number>(1);
 
     const filteredProducts = useMemo(() => {
         let term = productSearchTerm.toLowerCase();
@@ -95,23 +108,63 @@ export default function NovaVenda() {
         }, 100);
     };
 
-    const handleSelectProduct = (product: any) => {
-        setSelectedProduct(product);
-        setItemPrice(Number(product.sale_price) || 0);
-        setItemQtd(1);
-        setOpenProductSearch(false);
-        setProductSearchTerm("");
-        setTimeout(() => qtdRef.current?.focus(), 100);
+    const [selectedSeller, setSelectedSeller] = useState<any>(null);
+
+    const handleSelectSeller = (seller: any) => {
+        setSelectedSeller(seller);
+        setOpenSellerSearch(false);
     };
 
-    // Barcode scan: when Enter pressed in product search, supports "QTY*CODE" format (e.g. 10*7891234)
+    // Helper to add item with suffix/multiplier
+    const finalizeAddItem = (product: any, label: string, price: number, quantity: number) => {
+        const isBox = label !== "Unidade";
+        const suffix = isBox ? `-${label}` : "";
+        const displayName = isBox ? `${product.name} (${label})` : product.name;
+
+        const newItem = {
+            product_id: product.id + suffix,
+            name: displayName,
+            code: product.product_code || product.code || '',
+            unit: product.unit || 'UN',
+            quantity: quantity,
+            unit_price: price
+        };
+        setItems(prev => [...prev, newItem]);
+        setSelectedProduct(null);
+        setItemQtd(1);
+        setItemPrice(0);
+        setProductSearchTerm("");
+        setOpenProductSearch(false);
+
+        setTimeout(() => {
+            productSearchBtnRef.current?.focus();
+            setOpenProductSearch(true);
+        }, 100);
+    };
+
+    const handleSelectProduct = (product: any) => {
+        if (product.boxConfigs && product.boxConfigs.length > 0) {
+            setFormatDialogPendingQty(1);
+            setFormatDialogProduct(product);
+            setOpenProductSearch(false);
+        } else if (Number(product.sale_price2) > 0) {
+            setSelectedProduct(product);
+            setSelectedPriceType(1);
+            setItemPrice(Number(product.sale_price) || 0);
+            setItemQtd(1);
+            setOpenProductSearch(false);
+            setProductSearchTerm("");
+            setTimeout(() => qtdRef.current?.focus(), 100);
+        } else {
+            finalizeAddItem(product, "Unidade", Number(product.sale_price) || 0, 1);
+        }
+    };
+
     const handleProductSearchKeyDown = (e: React.KeyboardEvent) => {
         if (e.key !== 'Enter') return;
-        // Read directly from DOM to avoid stale state
         const raw = ((e.target as HTMLInputElement).value || productSearchTerm).trim();
         if (!raw) return;
 
-        // Parse quantity prefix: "10*codigo" or "10 * codigo"
         let qty = 1;
         let term = raw;
         const starMatch = raw.match(/^([\d.,]+)\s*\*\s*(.+)$/);
@@ -123,7 +176,6 @@ export default function NovaVenda() {
             }
         }
 
-        // Exact match by barcode (code) or product_code
         const exact = products.find(
             (p) =>
                 (p.code || '').toLowerCase() === term.toLowerCase() ||
@@ -139,22 +191,25 @@ export default function NovaVenda() {
         const candidate = exact || (filtered.length === 1 ? filtered[0] : null);
 
         if (candidate) {
-            const newItem = {
-                product_id: candidate.id,
-                name: candidate.name,
-                code: candidate.product_code || candidate.code || '',
-                unit: candidate.unit || 'UN',
-                quantity: qty,
-                unit_price: Number(candidate.sale_price)
-            };
-            setItems(prev => [...prev, newItem]);
-            setSelectedProduct(null);
-            setItemQtd(1);
-            setItemPrice(0);
-            setProductSearchTerm("");
-            setOpenProductSearch(false);
-            toast.success(`${qty}x ${candidate.name} adicionado!`);
-            e.preventDefault();
+            if (candidate.boxConfigs && candidate.boxConfigs.length > 0) {
+                setFormatDialogPendingQty(qty);
+                setFormatDialogProduct(candidate);
+                setOpenProductSearch(false);
+                setProductSearchTerm("");
+                e.preventDefault();
+            } else if (Number(candidate.sale_price2) > 0) {
+                setSelectedProduct(candidate);
+                setSelectedPriceType(1);
+                setItemPrice(Number(candidate.sale_price) || 0);
+                setItemQtd(qty);
+                setProductSearchTerm("");
+                setOpenProductSearch(false);
+                e.preventDefault();
+                setTimeout(() => qtdRef.current?.focus(), 100);
+            } else {
+                finalizeAddItem(candidate, "Unidade", Number(candidate.sale_price) || 0, qty);
+                e.preventDefault();
+            }
         } else if (filtered.length === 0) {
             toast.error('Nenhum produto encontrado para este código.');
         }
@@ -180,8 +235,6 @@ export default function NovaVenda() {
         };
 
         setItems([...items, newItem]);
-
-        // Reset product input
         setSelectedProduct(null);
         setItemQtd(1);
         setItemPrice(0);
@@ -196,6 +249,29 @@ export default function NovaVenda() {
         const newItems = [...items];
         newItems.splice(index, 1);
         setItems(newItems);
+    };
+
+    const handleSaveCustomer = async (data: any) => {
+        try {
+            const res = await addCustomerMutation.mutateAsync(data);
+            setSelectedCustomer({ id: res.id, name: data.name, cpf_cnpj: data.cpf_cnpj });
+            queryClient.invalidateQueries({ queryKey: ["customers"] });
+            setCustomerModalOpen(false);
+            toast.success("Cliente cadastrado e selecionado!");
+        } catch (error: any) {
+            toast.error(error.message);
+        }
+    };
+
+    const handleSaveProduct = async (data: any) => {
+        try {
+            await saveProductMutation.mutateAsync({ data });
+            queryClient.invalidateQueries({ queryKey: ["products-with-configs"] });
+            setProductModalOpen(false);
+            toast.success("Produto cadastrado com sucesso!");
+        } catch (error: any) {
+            toast.error(error.message);
+        }
     };
 
     const handleConfirmCheckout = async (payments: any[], confirmCustomerId?: string) => {
@@ -220,7 +296,8 @@ export default function NovaVenda() {
             payments,
             userId: user.id,
             discount: desconto,
-            customerId: finalCustomerId
+            customerId: finalCustomerId,
+            sellerId: selectedSeller?.id
         };
 
         try {
@@ -245,20 +322,27 @@ export default function NovaVenda() {
                 name: "CONSUMIDOR FINAL",
                 cpf_cnpj: ""
             });
+            setSelectedSeller(null);
         } catch (error: any) {
             toast.error(`Erro ao salvar venda: ${error.message || "Tente novamente"}`);
         }
     };
 
-    // Keyboard shortcuts
+    const handleOpenCheckout = () => {
+        const requireSeller = localStorage.getItem("pdv_require_seller") === "true";
+        if (requireSeller && !selectedSeller) {
+            toast.error("Por favor, selecione um vendedor para continuar.");
+            setOpenSellerSearch(true);
+            return;
+        }
+        if (items.length > 0) setCheckoutOpen(true);
+    };
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Disabled F2 
             if (e.key === 'F3') {
                 e.preventDefault();
-                if (items.length > 0) {
-                    setCheckoutOpen(true);
-                }
+                handleOpenCheckout();
             }
             if (e.key === 'F8') {
                 e.preventDefault();
@@ -278,53 +362,36 @@ export default function NovaVenda() {
                 navigate(-1);
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [items, selectedCustomer, total, desconto, acrescimo]);
+    }, [items, selectedCustomer, selectedSeller, total, desconto, acrescimo, navigate]);
 
     return (
         <div className="flex flex-col h-[calc(100vh-4rem)] bg-[#f0f4f8] -m-6 font-sans text-sm">
-            {/* Cabecalho Cliente */}
             <div className="bg-white m-2 border border-slate-300 rounded shadow-sm p-4 space-y-3">
                 <div className="flex gap-4">
                     <div className="w-24">
                         <label className="text-xs text-slate-500 block mb-1">Número</label>
                         <Input readOnly value="AUTO" className="h-8 bg-slate-100" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-[2]">
                         <label className="text-xs text-slate-500 block mb-1">Razão Social ou CNPJ/CPF</label>
                         <Popover open={openCustomerSearch} onOpenChange={setOpenCustomerSearch}>
                             <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={openCustomerSearch}
-                                    className="w-full justify-between h-8 text-left font-normal bg-white"
-                                >
+                                <Button variant="outline" className="w-full justify-between h-8 bg-white">
                                     {selectedCustomer ? selectedCustomer.name : "Selecione o Cliente..."}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-[500px] p-0" align="start">
                                 <Command>
-                                    <CommandInput placeholder="Buscar cliente por nome ou doc..." />
+                                    <CommandInput placeholder="Buscar cliente..." />
                                     <CommandList>
                                         <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
                                         <CommandGroup>
                                             {customersList.map((customer) => (
-                                                <CommandItem
-                                                    key={customer.id}
-                                                    value={`${customer.name} ${customer.cpf_cnpj}`}
-                                                    keywords={[customer.name, customer.cpf_cnpj || '']}
-                                                    onSelect={() => handleSelectCustomer(customer)}
-                                                >
-                                                    <Check
-                                                        className={cn(
-                                                            "mr-2 h-4 w-4",
-                                                            selectedCustomer?.id === customer.id ? "opacity-100" : "opacity-0"
-                                                        )}
-                                                    />
+                                                <CommandItem key={customer.id} onSelect={() => handleSelectCustomer(customer)}>
+                                                    <Check className={cn("mr-2 h-4 w-4", selectedCustomer?.id === customer.id ? "opacity-100" : "opacity-0")} />
                                                     {customer.name} - {customer.cpf_cnpj}
                                                 </CommandItem>
                                             ))}
@@ -334,159 +401,131 @@ export default function NovaVenda() {
                             </PopoverContent>
                         </Popover>
                     </div>
-                    <div className="w-48">
+                    <div className="flex-1 max-w-[250px]">
+                        <label className="text-xs text-slate-500 block mb-1">Vendedor</label>
+                        <Popover open={openSellerSearch} onOpenChange={setOpenSellerSearch}>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" className="w-full justify-between h-8 bg-white">
+                                    {selectedSeller ? selectedSeller.name : "Selecione o Vendedor..."}
+                                    <User className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[250px] p-0" align="start">
+                                <Command>
+                                    <CommandInput placeholder="Buscar vendedor..." />
+                                    <CommandList>
+                                        <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                                        <CommandGroup>
+                                            <CommandItem onSelect={() => { setSelectedSeller(null); setOpenSellerSearch(false); }}>
+                                                <Check className={cn("mr-2 h-4 w-4", !selectedSeller ? "opacity-100" : "opacity-0")} />
+                                                Nenhum
+                                            </CommandItem>
+                                            {sellers.filter(s => s.active).map((seller) => (
+                                                <CommandItem
+                                                    key={seller.id}
+                                                    value={seller.name}
+                                                    onSelect={() => handleSelectSeller(seller)}
+                                                >
+                                                    <Check
+                                                        className={cn(
+                                                            "mr-2 h-4 w-4",
+                                                            selectedSeller?.id === seller.id ? "opacity-100" : "opacity-0"
+                                                        )}
+                                                    />
+                                                    {seller.name}
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                    <div className="w-40">
                         <label className="text-xs text-slate-500 block mb-1">CPF/CNPJ</label>
                         <Input readOnly value={selectedCustomer?.cpf_cnpj || ""} className="h-8 bg-slate-100" />
                     </div>
                 </div>
-
             </div>
 
-            {/* Painel de Produto */}
-            <div className="bg-[#eaf1f8] m-2 border border-[#cbd5e1] rounded p-2">
-                <span className="text-[10px] uppercase font-bold text-slate-500 absolute -mt-4 bg-[#f0f4f8] px-1">Dados do produto</span>
+            <div className="bg-[#eaf1f8] m-2 border border-[#cbd5e1] rounded p-2 pb-5 relative">
+                <span className="text-[10px] uppercase font-bold text-slate-500 absolute -top-2 left-4 bg-[#f0f4f8] px-1">Dados do produto</span>
                 <div className="flex gap-2 items-end mt-1">
                     <div className="flex-1 border-r border-slate-300 pr-2">
                         <label className="text-[11px] text-slate-600 block mb-1">F10 Código | Código de Barras | Descrição | Referência</label>
                         <Popover open={openProductSearch} onOpenChange={setOpenProductSearch}>
                             <PopoverTrigger asChild>
-                                <Button
-                                    ref={productSearchBtnRef}
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={openProductSearch}
-                                    className="w-full justify-between h-9 text-left font-normal bg-white"
-                                >
+                                <Button ref={productSearchBtnRef} variant="outline" className="w-full justify-between h-12 text-lg text-left font-normal bg-white">
                                     {selectedProduct ? `${selectedProduct.product_code || selectedProduct.code || ''} - ${selectedProduct.name}` : "Localizar Produto..."}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-[600px] p-0" align="start">
+                            <PopoverContent className="w-[800px] p-0" align="start">
                                 <Command shouldFilter={false}>
-                                    <CommandInput
-                                        placeholder="Código de barras, código ou nome do produto..."
-                                        value={productSearchTerm}
-                                        onValueChange={setProductSearchTerm}
-                                        onKeyDown={handleProductSearchKeyDown}
-                                    />
+                                    <CommandInput placeholder="Localizar produto..." value={productSearchTerm} onValueChange={setProductSearchTerm} onKeyDown={handleProductSearchKeyDown} />
                                     <CommandList>
-                                        {filteredProducts.length > 0 && (
-                                            <>
-                                                <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {filteredProducts.map((product) => (
-                                                        <CommandItem
-                                                            key={product.id}
-                                                            value={`${product.product_code || product.code || ''} ${product.name}`}
-                                                            keywords={[String(product.product_code || ''), product.code || '', product.name]}
-                                                            onSelect={() => handleSelectProduct(product)}
-                                                        >
-                                                            <Check
-                                                                className={cn(
-                                                                    "mr-2 h-4 w-4",
-                                                                    selectedProduct?.id === product.id ? "opacity-100" : "opacity-0"
-                                                                )}
-                                                            />
-                                                            {(product.product_code || product.code) && <span className="mr-2 text-slate-400">[{product.product_code || product.code}]</span>}
-                                                            {product.name} - R$ {Number(product.sale_price).toFixed(2)}
-                                                        </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
-                                            </>
-                                        )}
+                                        <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                                        <CommandGroup>
+                                            {filteredProducts.map((product) => (
+                                                <CommandItem key={product.id} onSelect={() => handleSelectProduct(product)} className="flex items-center px-4 py-2 cursor-pointer">
+                                                    <span className="w-24 text-slate-500 font-mono text-xs truncate mr-2">{product.product_code || product.code || '--'}</span>
+                                                    <span className="flex-1 font-medium text-sm truncate mr-2">{product.name}</span>
+                                                    <span className="w-16 text-right text-xs bg-slate-100 rounded px-1">{product.stock_current ?? 0}</span>
+                                                    <span className="w-24 text-right text-xs font-semibold text-slate-700">R$ {product.sale_price.toFixed(2)}</span>
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
                                     </CommandList>
                                 </Command>
                             </PopoverContent>
                         </Popover>
                     </div>
 
+                    {selectedProduct && (
+                        <div className="flex flex-col">
+                            <label className="text-[11px] text-slate-600 block mb-1">Tabela</label>
+                            <div className="flex gap-1 h-12">
+                                <button onClick={() => { setSelectedPriceType(1); setItemPrice(selectedProduct.sale_price); }} className={`h-12 px-3 text-sm font-bold rounded border ${selectedPriceType === 1 ? 'bg-blue-600 text-white' : 'bg-white'}`}>P1</button>
+                                <button onClick={() => { setSelectedPriceType(2); setItemPrice(selectedProduct.sale_price2); }} disabled={!selectedProduct.sale_price2} className={`h-12 px-3 text-sm font-bold rounded border ${selectedPriceType === 2 ? 'bg-orange-500 text-white' : 'bg-white'}`}>P2</button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="w-24">
                         <label className="text-[11px] text-center text-slate-600 block mb-1">Quantidade</label>
-                        <Input
-                            ref={qtdRef}
-                            type="number"
-                            min="0.001"
-                            step="0.001"
-                            className="h-9 text-right"
-                            value={itemQtd}
-                            onChange={(e) => setItemQtd(Number(e.target.value))}
-                            onFocus={(e) => e.target.select()}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    priceRef.current?.focus();
-                                }
-                            }}
-                        />
+                        <Input ref={qtdRef} type="number" step="0.001" className="h-12 text-lg text-right" value={itemQtd} onChange={(e) => setItemQtd(Number(e.target.value))} onFocus={(e) => e.target.select()} onKeyDown={(e) => e.key === 'Enter' && priceRef.current?.focus()} />
                     </div>
                     <div className="w-28">
                         <label className="text-[11px] text-center text-slate-600 block mb-1">Preço R$</label>
-                        <Input
-                            ref={priceRef}
-                            type="number"
-                            step="0.01"
-                            className="h-9 text-right"
-                            value={itemPrice}
-                            onChange={(e) => setItemPrice(Number(e.target.value))}
-                            onFocus={(e) => e.target.select()}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    addBtnRef.current?.focus();
-                                }
-                            }}
-                        />
+                        <Input ref={priceRef} type="number" step="0.01" className="h-12 text-lg text-right" value={itemPrice} onChange={(e) => setItemPrice(Number(e.target.value))} onFocus={(e) => e.target.select()} onKeyDown={(e) => e.key === 'Enter' && handleAddItem()} />
                     </div>
-                    <div className="w-32">
-                        <label className="text-[11px] text-center text-slate-600 block mb-1">Total</label>
-                        <div className="h-9 flex items-center justify-end px-3 bg-white border rounded shadow-inner text-lg font-mono">
-                            {(itemQtd * itemPrice).toFixed(2).replace('.', ',')}
-                        </div>
-                    </div>
-                    <Button
-                        ref={addBtnRef}
-                        onClick={handleAddItem}
-                        className="h-9 px-6 bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold"
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                // Add is automatically triggered by onClick when Enter is pressed on a focused button, 
-                                // but we can make sure the search button gets focus after.
-                            }
-                        }}
-                    >
-                        ADD
-                    </Button>
+                    <Button onClick={handleAddItem} className="h-12 px-6 bg-blue-600 text-white font-bold">ADD</Button>
                 </div>
             </div>
 
-            {/* Listagem de itens */}
-            <div className="flex-1 bg-white m-2 border border-slate-300 rounded shadow-sm flex flex-col overflow-hidden">
+            <div className="flex-1 bg-white m-2 border border-slate-300 rounded shadow-sm overflow-hidden flex flex-col">
                 <div className="flex-1 overflow-auto">
-                    <table className="w-full text-xs">
-                        <thead className="bg-[#c2e0c6] border-y border-slate-400">
+                    <table className="w-full text-sm">
+                        <thead className="bg-[#c2e0c6] border-b border-slate-400">
                             <tr>
-                                <th className="p-1 px-4 text-left border-r border-slate-400/30 w-16">Item</th>
-                                <th className="p-1 px-4 text-left border-r border-slate-400/30 w-32">Código</th>
-                                <th className="p-1 px-4 text-left border-r border-slate-400/30">Descrição</th>
-                                <th className="p-1 px-4 text-right border-r border-slate-400/30 w-24">Qtd</th>
-                                <th className="p-1 px-4 text-center border-r border-slate-400/30 w-16">Und.</th>
-                                <th className="p-1 px-4 text-right border-r border-slate-400/30 w-32">Preço R$</th>
-                                <th className="p-1 px-4 text-right w-32">Total R$</th>
-                                <th className="p-1 w-12">Ação</th>
+                                <th className="p-2 text-left w-12">Item</th>
+                                <th className="p-2 text-left">Descrição</th>
+                                <th className="p-2 text-right">Qtd</th>
+                                <th className="p-2 text-right">Preço R$</th>
+                                <th className="p-2 text-right">Total R$</th>
+                                <th className="p-2 text-center w-12">Ação</th>
                             </tr>
                         </thead>
                         <tbody>
                             {items.map((it, idx) => (
-                                <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                    <td className="p-1 px-4 border-r border-slate-200">{idx + 1}</td>
-                                    <td className="p-1 px-4 border-r border-slate-200">{it.code}</td>
-                                    <td className="p-1 px-4 border-r border-slate-200">{it.name}</td>
-                                    <td className="p-1 px-4 border-r border-slate-200 text-right">{it.quantity.toFixed(3)}</td>
-                                    <td className="p-1 px-4 border-r border-slate-200 text-center">{it.unit}</td>
-                                    <td className="p-1 px-4 border-r border-slate-200 text-right">{it.unit_price.toFixed(2).replace('.', ',')}</td>
-                                    <td className="p-1 px-4 text-right font-semibold">{(it.quantity * it.unit_price).toFixed(2).replace('.', ',')}</td>
-                                    <td className="p-1 text-center">
-                                        <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:text-red-700">X</button>
+                                <tr key={idx} className="border-b hover:bg-slate-50">
+                                    <td className="p-2">{idx + 1}</td>
+                                    <td className="p-2">{it.name}</td>
+                                    <td className="p-2 text-right">{it.quantity.toFixed(3)}</td>
+                                    <td className="p-2 text-right">{it.unit_price.toFixed(2)}</td>
+                                    <td className="p-2 text-right font-semibold">{(it.quantity * it.unit_price).toFixed(2)}</td>
+                                    <td className="p-2 text-center">
+                                        <button onClick={() => handleRemoveItem(idx)} className="text-red-500 font-bold px-2">X</button>
                                     </td>
                                 </tr>
                             ))}
@@ -495,91 +534,36 @@ export default function NovaVenda() {
                 </div>
             </div>
 
-            {/* Totais de Revisor */}
-            <div className="bg-[#f8fafc] mx-2 px-4 py-3 flex justify-between items-center text-sm border-t border-slate-300">
-                <div className="flex gap-4 items-center">
-                    <div className="font-bold text-slate-600">
-                        SUBTOTAL | <span className="text-black ml-2 font-mono text-lg">{subtotal.toFixed(2).replace('.', ',')}</span>
-                    </div>
-                </div>
-                <div className="flex gap-8 items-center">
-                    <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-600 text-xs">DESCONTO %</span>
-                        <Input className="w-16 h-7 text-right bg-white" placeholder="0,00" />
-                        <span className="font-bold text-slate-600 text-xs">R$</span>
-                        <Input
-                            className="w-20 h-7 text-right bg-white"
-                            type="number"
-                            value={desconto}
-                            onChange={(e) => setDesconto(Number(e.target.value))}
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-600 text-xs">ACRÉSCIMO %</span>
-                        <Input className="w-16 h-7 text-right bg-white" placeholder="0,00" />
-                        <span className="font-bold text-slate-600 text-xs">R$</span>
-                        <Input
-                            className="w-20 h-7 text-right bg-white"
-                            type="number"
-                            value={acrescimo}
-                            onChange={(e) => setAcrescimo(Number(e.target.value))}
-                        />
-                    </div>
-                    <div className="flex items-center gap-2 font-bold text-xl">
-                        TOTAL | <span className="font-mono text-2xl">{total.toFixed(2).replace('.', ',')}</span>
-                    </div>
+            <div className="bg-[#f8fafc] mx-2 px-4 py-3 flex justify-between items-center text-sm border-t">
+                <div className="font-bold">SUBTOTAL | {subtotal.toFixed(2)}</div>
+                <div className="flex gap-4 items-center font-bold">
+                    <span>TOTAL | <span className="text-xl">{total.toFixed(2)}</span></span>
                 </div>
             </div>
 
-            {/* Footer Botoes ERP */}
-            <div className="bg-[#475569] p-3 shadow-inner flex justify-between items-center">
-                <div className="flex gap-4">
-                    <Button onClick={() => setProductModalOpen(true)} variant="secondary" className="bg-[#52525b] hover:bg-[#3f3f46] text-white border-none gap-2 px-6 h-12 text-lg">
-                        <Package className="text-yellow-500 h-5 w-5" /> F8 | Produtos
-                    </Button>
-                    <Button onClick={() => setCustomerModalOpen(true)} variant="secondary" className="bg-[#52525b] hover:bg-[#3f3f46] text-white border-none gap-2 px-6 h-12 text-lg">
-                        <Users className="text-purple-400 h-5 w-5" /> F9 | Pessoas
-                    </Button>
+            <div className="bg-[#475569] p-3 flex justify-between items-center">
+                <div className="flex gap-2">
+                    <Button onClick={() => setProductModalOpen(true)} className="bg-[#52525b] text-white">F8 | Produtos</Button>
+                    <Button onClick={() => setCustomerModalOpen(true)} className="bg-[#52525b] text-white">F9 | Pessoas</Button>
                 </div>
-
-                <div className="flex gap-4">
-                    <Button
-                        onClick={() => setCheckoutOpen(true)}
-                        className="bg-green-600 hover:bg-green-700 text-white font-bold h-12 px-12 text-lg rounded shadow uppercase tracking-wider"
-                        disabled={items.length === 0}
-                    >
-                        <Save className="mr-2 h-6 w-6" /> Finalizar Venda (F3)
-                    </Button>
-                    <Button
-                        onClick={() => navigate(-1)}
-                        variant="outline"
-                        className="h-12 px-8 text-lg bg-black/20 text-white border-none hover:bg-black/40 hover:text-red-400"
-                    >
-                        <XCircle className="mr-2 h-5 w-5" /> Cancelar (ESC)
-                    </Button>
+                <div className="flex gap-2">
+                    <Button onClick={handleOpenCheckout} className="bg-green-600 text-white px-8" disabled={items.length === 0}>Finalizar (F3)</Button>
+                    <Button onClick={() => navigate(-1)} variant="outline" className="text-white border-white hover:bg-white/20">Cancelar (ESC)</Button>
                 </div>
             </div>
 
-            {/* Modals para Cadastros Rápidos */}
             <CustomerFormDialog
                 open={customerModalOpen}
                 onOpenChange={setCustomerModalOpen}
-                onSave={() => setCustomerModalOpen(false)}
+                onSave={handleSaveCustomer}
             />
-
             <ProductFormDialog
                 open={productModalOpen}
                 onOpenChange={setProductModalOpen}
-                onSave={() => setProductModalOpen(false)}
-                title={""} />
-
-            <CheckoutDialog
-                open={checkoutOpen}
-                onOpenChange={setCheckoutOpen}
-                total={total}
-                onConfirm={handleConfirmCheckout}
+                title="Novo Produto"
+                onSave={handleSaveProduct}
             />
-
+            <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} total={total} onConfirm={handleConfirmCheckout} />
             <ReceiptOptionsDialog
                 open={receiptOptionsOpen}
                 onOpenChange={setReceiptOptionsOpen}
@@ -602,6 +586,18 @@ export default function NovaVenda() {
                     setReceiptOptionsOpen(false);
                 }}
             />
+
+            {formatDialogProduct && (
+                <SaleFormatDialog
+                    open={!!formatDialogProduct}
+                    onOpenChange={(open) => !open && setFormatDialogProduct(null)}
+                    productName={formatDialogProduct.name}
+                    unitPrice={formatDialogProduct.sale_price}
+                    boxConfigs={formatDialogProduct.boxConfigs}
+                    formatCurrency={(v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v)}
+                    onSelect={(label, price) => { finalizeAddItem(formatDialogProduct, label, price, formatDialogPendingQty); setFormatDialogProduct(null); }}
+                />
+            )}
         </div>
     );
 }

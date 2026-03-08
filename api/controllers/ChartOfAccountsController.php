@@ -7,8 +7,8 @@ class ChartOfAccountsController extends ApiController {
     
     public function list() {
         $this->authenticate();
-        $stmt = $this->conn->prepare("SELECT * FROM chart_of_accounts WHERE active = 1 ORDER BY type, name ASC");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT * FROM chart_of_accounts WHERE active = 1 AND company_id = :company_id ORDER BY type, name ASC");
+        $stmt->execute([':company_id' => $this->company_id]);
         $this->jsonResponse($stmt->fetchAll());
     }
 
@@ -22,11 +22,12 @@ class ChartOfAccountsController extends ApiController {
         }
 
         $id = generateUUID();
-        $query = "INSERT INTO chart_of_accounts (id, name, type) VALUES (:id, :name, :type)";
+        $query = "INSERT INTO chart_of_accounts (id, company_id, name, type) VALUES (:id, :company_id, :name, :type)";
         
         $stmt = $this->conn->prepare($query);
         $stmt->execute([
             ":id" => $id,
+            ":company_id" => $this->company_id,
             ":name" => $data->name,
             ":type" => $data->type
         ]);
@@ -40,8 +41,8 @@ class ChartOfAccountsController extends ApiController {
             $this->jsonResponse(["message" => "ID é obrigatório"], 400);
         }
         
-        $stmt = $this->conn->prepare("UPDATE chart_of_accounts SET active = 0 WHERE id = :id");
-        $stmt->execute([':id' => $id]);
+        $stmt = $this->conn->prepare("UPDATE chart_of_accounts SET active = 0 WHERE id = :id AND company_id = :company_id");
+        $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
         
         $this->jsonResponse(["message" => "Item de plano de contas removido"]);
     }

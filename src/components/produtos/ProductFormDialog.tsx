@@ -6,9 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ImagePlus, X, FileText } from "lucide-react";
 import { BoxConfigSection } from "./BoxConfigSection";
-import { useQuery } from "@tanstack/react-query";
 import { BoxConfig } from "@/hooks/useProducts";
 import { toast } from "sonner";
+import { useCategories } from "@/hooks/useCategories";
 
 interface ProductFormData {
   name: string;
@@ -36,6 +36,7 @@ interface ProductFormData {
   ipi_aliquota: number;
   boxConfigs: BoxConfig[];
   productCode?: number;
+  venda_delivery: boolean;
 }
 
 interface ProductFormDialogProps {
@@ -74,6 +75,7 @@ const defaultData: ProductFormData = {
   ipi_aliquota: 0,
   boxConfigs: [],
   productCode: 0,
+  venda_delivery: false,
 };
 
 export function ProductFormDialog({ open, onOpenChange, onSave, initialData, title }: ProductFormDialogProps) {
@@ -81,16 +83,7 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
   const [imagePreview, setImagePreview] = useState<string>("");
   const [ncmDescription, setNcmDescription] = useState<string>("");
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ["categories"],
-    queryFn: async () => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/categories`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-      });
-      if (!response.ok) throw new Error('Falha ao carregar categorias');
-      return await response.json();
-    },
-  });
+  const { data: categories = [], isLoading: loadingCategories } = useCategories();
 
   useEffect(() => {
     if (open) {
@@ -98,7 +91,7 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
         setForm(defaultData);
         setImagePreview("");
         // Busca o próximo código sequencial
-        fetch(`${import.meta.env.VITE_API_URL}/products/next-code`, {
+        fetch(`${import.meta.env.VITE_API_URL || '/api'}/products/next-code`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
         })
           .then(res => res.json())
@@ -119,7 +112,7 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
     const fetchNcmDesc = async () => {
       if (form.ncm && form.ncm.length === 8) {
         try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/fiscal/ncm/${form.ncm}`, {
+          const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/fiscal/ncm/${form.ncm}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
           });
           if (response.ok) {
@@ -140,7 +133,7 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
     if (e.key === "Enter" && form.name.trim().length >= 3) {
       e.preventDefault(); // Evita submissão do formulário se houver
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/fiscal/ncm/search?query=${encodeURIComponent(form.name.trim())}`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/fiscal/ncm/search?query=${encodeURIComponent(form.name.trim())}`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
         });
         if (response.ok) {
@@ -223,7 +216,7 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Nome *</Label>
               <Input
@@ -249,9 +242,15 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
               <Select value={form.category} onValueChange={(v) => updateField("category", v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
-                  {categories.map((cat: any) => (
-                    <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
-                  ))}
+                  {loadingCategories ? (
+                    <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                  ) : categories.length === 0 ? (
+                    <SelectItem value="none" disabled>Nenhuma categoria encontrada</SelectItem>
+                  ) : (
+                    categories.map((cat: any) => (
+                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -266,9 +265,20 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2 flex flex-col justify-end pb-2">
+              <label className="flex items-center gap-2 cursor-pointer w-fit text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={form.venda_delivery}
+                  onChange={(e) => updateField("venda_delivery", e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                Exibir no Delivery
+              </label>
+            </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Custo</Label>
               <Input type="number" step="0.01" value={form.costPrice || ""} onChange={(e) => updateField("costPrice", Number(e.target.value))} />

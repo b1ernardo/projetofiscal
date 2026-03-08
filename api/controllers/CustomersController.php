@@ -7,8 +7,8 @@ class CustomersController extends ApiController {
     
     public function list() {
         $this->authenticate();
-        $stmt = $this->conn->prepare("SELECT * FROM customers ORDER BY name ASC");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT * FROM customers WHERE company_id = :company_id ORDER BY name ASC");
+        $stmt->execute([':company_id' => $this->company_id]);
         $this->jsonResponse($stmt->fetchAll());
     }
 
@@ -22,12 +22,13 @@ class CustomersController extends ApiController {
         }
 
         $id = generateUUID();
-        $query = "INSERT INTO customers (id, name, cpf_cnpj, email, phone, address, ie, cep, logradouro, numero, bairro, municipio, codigo_municipio, uf) 
-                  VALUES (:id, :name, :cpf_cnpj, :email, :phone, :address, :ie, :cep, :logradouro, :numero, :bairro, :municipio, :codigo_municipio, :uf)";
+        $query = "INSERT INTO customers (id, company_id, name, cpf_cnpj, email, phone, address, ie, cep, logradouro, numero, bairro, municipio, codigo_municipio, uf) 
+                  VALUES (:id, :company_id, :name, :cpf_cnpj, :email, :phone, :address, :ie, :cep, :logradouro, :numero, :bairro, :municipio, :codigo_municipio, :uf)";
         
         $stmt = $this->conn->prepare($query);
         $stmt->execute([
             ":id" => $id,
+            ":company_id" => $this->company_id,
             ":name" => $data->name,
             ":cpf_cnpj" => $data->cpf_cnpj ?? null,
             ":email" => $data->email ?? null,
@@ -69,12 +70,13 @@ class CustomersController extends ApiController {
                     codigo_municipio = :codigo_municipio, 
                     uf = :uf,
                     status = :status
-                  WHERE id = :id";
+                  WHERE id = :id AND company_id = :company_id";
         
         $stmt = $this->conn->prepare($query);
         try {
             $stmt->execute([
                 ":id" => $id,
+                ":company_id" => $this->company_id,
                 ":name" => $data->name,
                 ":cpf_cnpj" => $data->cpf_cnpj ?? null,
                 ":email" => $data->email ?? null,
@@ -105,20 +107,20 @@ class CustomersController extends ApiController {
         $this->authenticate();
         try {
             // Verifica se o cliente possui contas ou vendas relacionadas
-            $stmt = $this->conn->prepare("SELECT COUNT(*) FROM sales WHERE customer_id = :id");
-            $stmt->execute([":id" => $id]);
+            $stmt = $this->conn->prepare("SELECT COUNT(*) FROM sales WHERE customer_id = :id AND company_id = :company_id");
+            $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
             if ($stmt->fetchColumn() > 0) {
                 return $this->jsonResponse(["message" => "Não é possível excluir cliente com vendas vinculadas."], 400);
             }
 
-            $stmt = $this->conn->prepare("SELECT COUNT(*) FROM accounts_receivable WHERE customer_id = :id");
-            $stmt->execute([":id" => $id]);
+            $stmt = $this->conn->prepare("SELECT COUNT(*) FROM accounts_receivable WHERE customer_id = :id AND company_id = :company_id");
+            $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
             if ($stmt->fetchColumn() > 0) {
                 return $this->jsonResponse(["message" => "Não é possível excluir cliente com contas a receber vinculadas."], 400);
             }
 
-            $stmt = $this->conn->prepare("DELETE FROM customers WHERE id = :id");
-            $stmt->execute([":id" => $id]);
+            $stmt = $this->conn->prepare("DELETE FROM customers WHERE id = :id AND company_id = :company_id");
+            $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
 
             if ($stmt->rowCount() > 0) {
                 $this->jsonResponse(["message" => "Cliente removido com sucesso"]);

@@ -2,7 +2,11 @@ import { useState, useMemo, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, ShoppingCart, ListRestart, Loader2, Unlock, Lock } from "lucide-react";
+import { Search, ShoppingCart, ListRestart, Loader2, Unlock, Lock, User, Check } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { useSellers } from "@/hooks/useSellers";
 import { CheckoutDialog } from "@/components/pdv/CheckoutDialog";
 import { PauseSaleDialog } from "@/components/pdv/PauseSaleDialog";
 import { PausedSalesDialog } from "@/components/pdv/PausedSalesDialog";
@@ -63,8 +67,12 @@ export default function PDV() {
   const { data: products = [], isLoading } = useProducts();
   const saveSale = useSaveSale();
   const emitFiscal = useFiscal();
+  const { data: sellers = [] } = useSellers();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  const [selectedSeller, setSelectedSeller] = useState<any>(null);
+  const [openSellerSearch, setOpenSellerSearch] = useState(false);
 
   const { data: cashRegister, isLoading: loadingRegister } = useQuery({
     queryKey: ["cash-register-open"],
@@ -228,6 +236,16 @@ export default function PDV() {
   const discountAmount = discountType === "percent" ? subtotal * (discount / 100) : discount;
   const totalWithDiscount = Math.max(0, subtotal - discountAmount);
 
+  const handleOpenCheckout = () => {
+    const requireSeller = localStorage.getItem("pdv_require_seller") === "true";
+    if (requireSeller && !selectedSeller) {
+      toast.error("Por favor, selecione um vendedor para continuar.");
+      setOpenSellerSearch(true);
+      return;
+    }
+    setCheckoutOpen(true);
+  };
+
   const cartPanelProps = {
     cart,
     onUpdateQuantity: updateQuantity,
@@ -237,7 +255,7 @@ export default function PDV() {
     onDiscountChange: setDiscount,
     formatCurrency,
     onPause: () => setPauseDialogOpen(true),
-    onCheckout: () => setCheckoutOpen(true),
+    onCheckout: handleOpenCheckout,
     onSaveToComanda: () => setSaveToComandaOpen(true),
   };
 
@@ -294,6 +312,47 @@ export default function PDV() {
               <Badge variant="destructive" className="ml-2 h-5 min-w-5 px-1.5 text-xs">{pausedSales.length}</Badge>
             )}
           </Button>
+
+          <Popover open={openSellerSearch} onOpenChange={setOpenSellerSearch}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("gap-2", selectedSeller && "bg-primary/10 border-primary text-primary font-bold")}>
+                <User className="h-4 w-4" />
+                {selectedSeller ? selectedSeller.name : "Vendedor"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[200px] p-0" align="end">
+              <Command>
+                <CommandInput placeholder="Buscar vendedor..." />
+                <CommandList>
+                  <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      onSelect={() => { setSelectedSeller(null); setOpenSellerSearch(false); }}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", !selectedSeller ? "opacity-100" : "opacity-0")} />
+                      Nenhum
+                    </CommandItem>
+                    {sellers.filter(s => s.active).map((seller) => (
+                      <CommandItem
+                        key={seller.id}
+                        value={seller.name}
+                        onSelect={() => { setSelectedSeller(seller); setOpenSellerSearch(false); }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectedSeller?.id === seller.id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        {seller.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
           <Button variant="destructive" size="sm" onClick={() => setCloseCashDialog(true)} className="shrink-0">
             <Lock className="mr-2 h-4 w-4" /> Fechar Caixa
           </Button>
@@ -312,7 +371,7 @@ export default function PDV() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid flex-1 gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 overflow-auto content-start pb-20 md:pb-0">
+          <div className="grid flex-1 gap-2 grid-cols-2 sm:md:grid-cols-3 lg:md:grid-cols-4 overflow-auto content-start pb-20 md:pb-0">
             {filteredProducts.map((product) => (
               <button
                 key={product.id}
@@ -373,9 +432,17 @@ export default function PDV() {
           const finalCustomerId = customerId === 'none' ? undefined : customerId;
 
           try {
-            const res = await saveSale.mutateAsync({
-              cart, total: totalWithDiscount, payments, userId: user.id, discount: discountAmount, customerId: finalCustomerId
-            });
+            const payload = {
+              cart,
+              total: totalWithDiscount,
+              payments,
+              userId: user.id,
+              discount: discountAmount,
+              customerId: finalCustomerId,
+              sellerId: selectedSeller?.id
+            };
+
+            const res = await saveSale.mutateAsync(payload);
             toast.success(`Venda #${res.sale_number} finalizada com sucesso!`);
             setLastSaleData({
               saleId: res.id,
@@ -389,6 +456,7 @@ export default function PDV() {
             setReceiptOptionsOpen(true);
             setCart([]);
             setDiscount(0);
+            setSelectedSeller(null);
             setCheckoutOpen(false);
             setCartDrawerOpen(false);
           } catch (err: any) {
@@ -440,10 +508,9 @@ export default function PDV() {
             const displayName = label === "Unidade"
               ? formatDialogProduct.name
               : `${formatDialogProduct.name} (${label})`;
-            // boxQuantity = units inside a box (e.g. 12 for a case of 12)
-            // pendingQty  = how many boxes/units the user scanned (e.g. 10 from "10*barcode")
-            const totalQty = pendingQty * (label === "Unidade" ? 1 : boxQuantity);
-            addToCart(formatDialogProduct.id + "-" + label, displayName, price, totalQty);
+            // pass pendingQty, not multiplied, because the price is already the full box price
+            // and the backend parses the ID suffix to properly multiply the internal stock deduction
+            addToCart(formatDialogProduct.id + "-" + label, displayName, price, pendingQty);
             setPendingQty(1);
             setFormatDialogProduct(null);
           }}

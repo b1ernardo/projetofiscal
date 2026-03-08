@@ -20,6 +20,7 @@ import {
   FileCheck,
   FileX,
   ChevronRight,
+  Building2,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,30 +57,47 @@ const mainItems: MenuItem[] = [
   { title: "Nova Venda", url: "/nova-venda", icon: ShoppingCart, permission: "pdv" },
   { title: "Histórico de Vendas", url: "/vendas", icon: History, permission: "pdv" },
   { title: "Comandas", url: "/comandas", icon: ClipboardList, permission: "comandas" },
-  { title: "Produtos", url: "/produtos", icon: Package, permission: "produtos" },
-  { title: "Estoque", url: "/estoque", icon: Warehouse, permission: "estoque" },
-  { title: "Compras", url: "/compras", icon: Receipt, permission: "compras" },
+  { title: "Delivery / On-line", url: "/delivery-painel", icon: Truck, permission: "delivery" },
+  { title: "Produtos", url: "/produtos", icon: Package, permission: "stock" },
+  { title: "Estoque", url: "/estoque", icon: Warehouse, permission: "stock" },
+  { title: "Compras", url: "/compras", icon: Receipt, permission: "stock" },
 ];
 
 const financialItems: MenuItem[] = [
-  { title: "Caixa", url: "/caixa", icon: DollarSign, permission: "caixa" },
-  { title: "Contas a Pagar", url: "/contas-pagar", icon: ArrowDownCircle, permission: "caixa" },
-  { title: "Contas a Receber", url: "/contas-receber", icon: ArrowUpCircle, permission: "caixa" },
+  { title: "Caixa Diário", url: "/caixa", icon: DollarSign, permission: "finances" },
+  { title: "Contas a Pagar", url: "/contas-pagar", icon: ArrowDownCircle, permission: "finances" },
+  { title: "Contas a Receber", url: "/contas-receber", icon: ArrowUpCircle, permission: "finances" },
 ];
 
 const fiscalItems: MenuItem[] = [
-  { title: "NF-e", url: "/nfe", icon: FileCheck, permission: "pdv" },
-  { title: "NFC-e", url: "/nfce", icon: FileX, permission: "pdv" },
-  { title: "NF-e Avulsa", url: "/nfe-avulsa", icon: FileJson, permission: "pdv" },
+  { title: "NF-e", url: "/nfe", icon: FileCheck, permission: "fiscal" },
+  { title: "NFC-e", url: "/nfce", icon: FileX, permission: "fiscal" },
+  { title: "NF-e Avulsa", url: "/nfe-avulsa", icon: FileJson, permission: "fiscal" },
 ];
 
 const registrationItems: MenuItem[] = [
   { title: "Clientes", url: "/clientes", icon: Users, permission: "clientes" },
+  { title: "Vendedores", url: "/vendedores", icon: UserPlus, permission: "clientes" },
   { title: "Fornecedores", url: "/fornecedores", icon: Truck, permission: "fornecedores" },
 ];
 
 const systemItems: MenuItem[] = [
-  { title: "Relatórios", url: "/relatorios", icon: BarChart3, permission: "relatorios" },
+  {
+    title: "Relatórios",
+    url: "/relatorios",
+    icon: BarChart3,
+    permission: "relatorios",
+    subItems: [
+      { title: "Vendas por Período", url: "/relatorios?tab=vendas-periodo" },
+      { title: "Estoque", url: "/relatorios?tab=estoque" },
+      { title: "Financeiro", url: "/relatorios?tab=financeiro" },
+      { title: "Produtos Mais Vendidos", url: "/relatorios?tab=produtos-mais-vendidos" },
+      { title: "Vendas por Produto", url: "/relatorios?tab=vendas-produto" },
+      { title: "Vendas por Clientes", url: "/relatorios?tab=vendas-clientes" },
+      { title: "Vendas por Vendedor", url: "/relatorios?tab=vendas-vendedor" },
+      { title: "Lucratividade", url: "/relatorios?tab=lucratividade" }
+    ]
+  },
   {
     title: "Configurações",
     url: "/configuracoes",
@@ -90,9 +108,14 @@ const systemItems: MenuItem[] = [
       { title: "Configurações de Usuário", url: "/configuracoes?tab=usuarios" },
       { title: "Opções PDV", url: "/configuracoes?tab=pdv" },
       { title: "Plano de Contas", url: "/configuracoes?tab=plano-contas" },
-      { title: "Formas de Pagamento", url: "/configuracoes?tab=pagamentos" }
+      { title: "Formas de Pagamento", url: "/configuracoes?tab=pagamentos" },
+      { title: "Delivery", url: "/configuracoes?tab=delivery" }
     ]
   },
+];
+
+const superAdminItems: MenuItem[] = [
+  { title: "Empresas & Acessos", url: "/superadmin", icon: Building2, permission: "superadmin" },
 ];
 
 export function AppSidebar() {
@@ -168,6 +191,24 @@ export function AppSidebar() {
       });
   };
 
+  const renderSidebarGroup = (label: string, items: MenuItem[]) => {
+    const allowedItems = items.filter(item => hasPermission(item.permission));
+    if (allowedItems.length === 0) return null;
+
+    return (
+      <SidebarGroup>
+        <SidebarGroupLabel className="text-sidebar-muted uppercase font-bold text-[10px] tracking-wider px-2 py-4">
+          {label}
+        </SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {renderMenuItems(items)}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    );
+  };
+
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
@@ -185,40 +226,34 @@ export function AppSidebar() {
       <SidebarSeparator />
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-muted uppercase font-bold text-[10px] tracking-wider px-2 py-4">Menu Principal</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{renderMenuItems(mainItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {roles.includes("super_admin") && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-muted uppercase font-bold text-[10px] tracking-wider px-2 py-4 text-primary">Super Administração</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {superAdminItems.map(item => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild tooltip={item.title} isActive={location.pathname === item.url}>
+                      <NavLink
+                        to={item.url}
+                        className={location.pathname === item.url ? "bg-primary text-primary-foreground font-bold shadow-sm" : ""}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-muted uppercase font-bold text-[10px] tracking-wider px-2 py-4">Financeiro</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{renderMenuItems(financialItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-muted uppercase font-bold text-[10px] tracking-wider px-2 py-4">Cadastro</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{renderMenuItems(registrationItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-muted uppercase font-bold text-[10px] tracking-wider px-2 py-4">Fiscal</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{renderMenuItems(fiscalItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-muted uppercase font-bold text-[10px] tracking-wider px-2 py-4">Sistema</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>{renderMenuItems(systemItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {renderSidebarGroup("Menu Principal", mainItems)}
+        {renderSidebarGroup("Financeiro", financialItems)}
+        {renderSidebarGroup("Cadastro", registrationItems)}
+        {renderSidebarGroup("Fiscal", fiscalItems)}
+        {renderSidebarGroup("Sistema", systemItems)}
       </SidebarContent>
 
       <SidebarFooter className="p-4">
@@ -232,7 +267,7 @@ export function AppSidebar() {
               {profile?.full_name || "Usuário"}
             </span>
             <span className="truncate text-xs text-sidebar-muted">
-              {roles[0] === "admin" ? "Administrador" : roles[0] === "operador_caixa" ? "Operador" : roles[0] === "estoquista" ? "Estoquista" : "Sem perfil"}
+              {roles.includes("super_admin") ? "Super Administrador" : roles.includes("admin") ? "Administrador" : roles.includes("operador_caixa") ? "Operador" : roles.includes("estoquista") ? "Estoquista" : "Sem perfil"}
             </span>
           </div>
         </div>

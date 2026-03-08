@@ -1,5 +1,5 @@
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost/SISTEMADISTRIDUIDORA/api';
+const API_URL = (import.meta.env.VITE_API_URL || '/projetofiscal/api').replace(/\/$/, '');
 
 interface RequestOptions extends RequestInit {
   body?: any;
@@ -7,7 +7,7 @@ interface RequestOptions extends RequestInit {
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const isFormData = options.body instanceof FormData;
-  
+
   const headers = {
     ...(!isFormData && { 'Content-Type': 'application/json' }),
     ...options.headers,
@@ -16,7 +16,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   const config: RequestInit = {
     ...options,
     headers: headers as HeadersInit,
-    credentials: 'include', // Important for cookies/sessions
+    // credentials: 'include', // Removed to avoid CORS wildcard issues
     body: isFormData ? options.body : JSON.stringify(options.body),
   };
 
@@ -33,7 +33,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   // Handle empty responses (like 204 No Content)
   if (response.status === 204) {
-      return {} as T;
+    return {} as T;
   }
 
   return response.json();

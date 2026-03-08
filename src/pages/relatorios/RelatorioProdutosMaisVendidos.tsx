@@ -41,12 +41,9 @@ export default function RelatorioProdutosMaisVendidos() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/relatorios")}><ArrowLeft className="h-5 w-5" /></Button>
-        <div>
-          <h1 className="text-2xl font-bold">Produtos Mais Vendidos</h1>
-          <p className="text-muted-foreground">Ranking de produtos por quantidade vendida</p>
-        </div>
+      <div className="flex flex-col gap-1 pb-4">
+        <h3 className="text-xl font-bold">Produtos Mais Vendidos</h3>
+        <p className="text-sm text-muted-foreground">Ranking de produtos por quantidade vendida</p>
       </div>
 
       {isLoading ? (
@@ -55,7 +52,7 @@ export default function RelatorioProdutosMaisVendidos() {
         <p className="text-center text-muted-foreground py-8">Nenhuma venda registrada ainda.</p>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:md:grid-cols-3">
             {ranking.slice(0, 3).map((p, i) => (
               <Card key={p.name} className={i === 0 ? "border-primary/50" : ""}>
                 <CardContent className="flex items-center gap-3 p-4">

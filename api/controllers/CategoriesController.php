@@ -7,8 +7,8 @@ class CategoriesController extends ApiController {
     
     public function list() {
         $this->authenticate();
-        $stmt = $this->conn->prepare("SELECT id, name FROM categories ORDER BY name ASC");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT id, name FROM categories WHERE company_id = :company_id ORDER BY name ASC");
+        $stmt->execute([':company_id' => $this->company_id]);
         $this->jsonResponse($stmt->fetchAll());
     }
 
@@ -22,9 +22,10 @@ class CategoriesController extends ApiController {
         }
 
         $id = generateUUID();
-        $stmt = $this->conn->prepare("INSERT INTO categories (id, name) VALUES (:id, :name)");
+        $stmt = $this->conn->prepare("INSERT INTO categories (id, company_id, name) VALUES (:id, :company_id, :name)");
         $stmt->execute([
             ":id" => $id,
+            ":company_id" => $this->company_id,
             ":name" => $data->name
         ]);
 
@@ -34,8 +35,8 @@ class CategoriesController extends ApiController {
     public function delete($id) {
         $this->authenticate();
         try {
-            $stmt = $this->conn->prepare("DELETE FROM categories WHERE id = :id");
-            $stmt->execute([":id" => $id]);
+            $stmt = $this->conn->prepare("DELETE FROM categories WHERE id = :id AND company_id = :company_id");
+            $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
             $this->jsonResponse(["message" => "Categoria removida com sucesso"]);
         } catch (Exception $e) {
             $this->jsonResponse(["message" => "Não foi possível remover. Pode haver produtos vinculados."], 400);

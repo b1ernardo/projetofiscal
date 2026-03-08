@@ -71,7 +71,8 @@ export default function Produtos() {
     pis_cst_entrada: string; pis_cst_saida: string; pis_aliquota: number; cofins_aliquota: number;
     ipi_cst: string; ipi_aliquota: number;
     productCode?: number;
-    boxConfigs: BoxConfig[]
+    boxConfigs: BoxConfig[];
+    venda_delivery: boolean;
   }) => {
     saveProduct.mutate(
       { id: isCloning ? undefined : editProduct?.id, data },
@@ -124,6 +125,7 @@ export default function Produtos() {
     ipi_aliquota: p.ipi_aliquota ?? 0,
     productCode: p.product_code ?? 0,
     boxConfigs: p.boxConfigs,
+    venda_delivery: p.venda_delivery ?? false,
   });
 
   return (
@@ -166,6 +168,7 @@ export default function Produtos() {
                   <TableHead>Un.</TableHead>
                   <TableHead className="text-right">Custo</TableHead>
                   <TableHead className="text-right">Venda</TableHead>
+                  <TableHead className="text-right">Preço 2</TableHead>
                   <TableHead className="text-right">Estoque</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
@@ -195,6 +198,7 @@ export default function Produtos() {
                     <TableCell className="text-xs">{p.unit}</TableCell>
                     <TableCell className="text-right">{formatCurrency(p.cost_price)}</TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(p.sale_price)}</TableCell>
+                    <TableCell className="text-right font-medium">{p.sale_price2 > 0 ? formatCurrency(p.sale_price2) : '—'}</TableCell>
                     <TableCell className="text-right">
                       <Badge variant={p.stock_current <= p.stock_min ? "destructive" : "secondary"}>
                         {p.stock_current}

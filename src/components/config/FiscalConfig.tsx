@@ -398,7 +398,7 @@ export function FiscalConfig() {
           ) : naturezas.length === 0 ? (
             <p className="text-sm text-muted-foreground italic">Nenhuma natureza encontrada para "{searchNat}".</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:md:grid-cols-3 gap-2">
               {naturezas.map((nat) => (
                 <div
                   key={nat.id}

@@ -105,7 +105,7 @@ export function EditSaleDialog({ open, onOpenChange, saleId, onSuccess }: Props)
 
                         <div className="space-y-3">
                             <h3 className="text-sm font-bold uppercase text-muted-foreground">Itens da Venda</h3>
-                            <div className="rounded-md border">
+                            <div className="rounded-md border overflow-x-auto">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>

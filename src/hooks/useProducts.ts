@@ -33,6 +33,7 @@ export interface ProductWithBoxConfigs {
   ipi_aliquota: number | null;
   product_code: number | null;
   boxConfigs: BoxConfig[];
+  venda_delivery: boolean;
 }
 
 const getHeaders = () => {
@@ -44,7 +45,7 @@ const getHeaders = () => {
 };
 
 async function fetchProducts(): Promise<ProductWithBoxConfigs[]> {
-  const response = await fetch(`${import.meta.env.VITE_API_URL}/products`, {
+  const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/products`, {
     headers: getHeaders(),
   });
 
@@ -87,6 +88,7 @@ async function fetchProducts(): Promise<ProductWithBoxConfigs[]> {
       quantity: Number(bc.quantity),
       price: Number(bc.price)
     })),
+    venda_delivery: Boolean(p.venda_delivery),
   }));
 }
 
@@ -123,6 +125,7 @@ interface SaveProductData {
   ipi_aliquota?: number;
   productCode?: number;
   boxConfigs: BoxConfig[];
+  venda_delivery: boolean;
 }
 
 export function useSaveProduct() {
@@ -131,8 +134,8 @@ export function useSaveProduct() {
   return useMutation({
     mutationFn: async ({ id, data }: { id?: string; data: SaveProductData }) => {
       const url = id
-        ? `${import.meta.env.VITE_API_URL}/products`
-        : `${import.meta.env.VITE_API_URL}/products`;
+        ? `${import.meta.env.VITE_API_URL || '/api'}/products`
+        : `${import.meta.env.VITE_API_URL || '/api'}/products`;
 
       const method = id ? 'PUT' : 'POST';
 
@@ -161,7 +164,8 @@ export function useSaveProduct() {
         ipi_cst: data.ipi_cst,
         ipi_aliquota: data.ipi_aliquota,
         product_code: data.productCode,
-        boxConfigs: data.boxConfigs
+        boxConfigs: data.boxConfigs,
+        venda_delivery: data.venda_delivery ? 1 : 0
       };
 
       const response = await fetch(url, {
@@ -189,7 +193,7 @@ export function useDeleteProduct() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/products`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/products`, {
         method: 'DELETE',
         headers: getHeaders(),
         body: JSON.stringify({ id })

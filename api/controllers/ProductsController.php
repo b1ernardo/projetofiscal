@@ -11,17 +11,19 @@ class ProductsController extends ApiController {
         $query = "SELECT p.*, c.name as category_name 
                   FROM products p 
                   LEFT JOIN categories c ON p.category_id = c.id 
-                  WHERE p.active = 1
+                  WHERE p.active = 1 AND p.company_id = :company_id
                   ORDER BY p.name ASC";
         
         $stmt = $this->conn->prepare($query);
-        $stmt->execute();
+        $stmt->execute([':company_id' => $this->company_id]);
         $products = $stmt->fetchAll();
 
-        // Busca configurações de caixa para todos os produtos
-        $bc_query = "SELECT * FROM product_box_configs";
+        // Busca configurações de caixa para todos os produtos da empresa
+        $bc_query = "SELECT pbc.* FROM product_box_configs pbc 
+                     INNER JOIN products p ON pbc.product_id = p.id
+                     WHERE p.company_id = :company_id";
         $bc_stmt = $this->conn->prepare($bc_query);
-        $bc_stmt->execute();
+        $bc_stmt->execute([':company_id' => $this->company_id]);
         $all_configs = $bc_stmt->fetchAll();
 
         // Agrupa as configs por produto
@@ -57,6 +59,7 @@ class ProductsController extends ApiController {
             $p['ipi_cst'] = $p['ipi_cst'] ?? '53';
             $p['ipi_aliquota'] = $p['ipi_aliquota'] !== null ? (float)$p['ipi_aliquota'] : null;
             $p['product_code'] = $p['product_code'] !== null ? (int)$p['product_code'] : null;
+            $p['venda_delivery'] = (bool)($p['venda_delivery'] ?? 0);
         }
 
         $this->jsonResponse($products);
@@ -76,7 +79,7 @@ class ProductsController extends ApiController {
             $this->conn->beginTransaction();
 
             $id = generateUUID();
-            $categoryId = getOrCreateCategory($this->conn, $data->category ?? "");
+            $categoryId = getOrCreateCategory($this->conn, $data->category ?? "", $this->company_id);
 
             $cst = isset($data->cst) ? $data->cst : '00';
             $csosn = isset($data->csosn) ? $data->csosn : '102';
@@ -87,12 +90,15 @@ class ProductsController extends ApiController {
             $ipi_cst = isset($data->ipi_cst) ? $data->ipi_cst : '53';
             $ipi_aliquota = isset($data->ipi_aliquota) ? $data->ipi_aliquota : 0.0;
 
+            $venda_delivery = isset($data->venda_delivery) ? (int)$data->venda_delivery : 0;
+
             $stmt = $this->conn->prepare("INSERT INTO products 
-                  (id, name, category_id, product_code, code, cost_price, sale_price, sale_price2, stock_current, stock_min, unit, photo_url, active, ncm, cest, cfop_padrao, origem, cst, csosn, pis_cst_entrada, pis_cst_saida, pis_aliquota, cofins_aliquota, ipi_cst, ipi_aliquota) 
-                  VALUES (:id, :name, :category_id, :product_code, :code, :cost_price, :sale_price, :sale_price2, :stock_current, :stock_min, :unit, :photo_url, :active, :ncm, :cest, :cfop_padrao, :origem, :cst, :csosn, :pis_cst_entrada, :pis_cst_saida, :pis_aliquota, :cofins_aliquota, :ipi_cst, :ipi_aliquota)");
+                  (id, company_id, name, category_id, product_code, code, cost_price, sale_price, sale_price2, stock_current, stock_min, unit, photo_url, active, ncm, cest, cfop_padrao, origem, cst, csosn, pis_cst_entrada, pis_cst_saida, pis_aliquota, cofins_aliquota, ipi_cst, ipi_aliquota, venda_delivery) 
+                  VALUES (:id, :company_id, :name, :category_id, :product_code, :code, :cost_price, :sale_price, :sale_price2, :stock_current, :stock_min, :unit, :photo_url, :active, :ncm, :cest, :cfop_padrao, :origem, :cst, :csosn, :pis_cst_entrada, :pis_cst_saida, :pis_aliquota, :cofins_aliquota, :ipi_cst, :ipi_aliquota, :venda_delivery)");
             
             $stmt->execute([
                 ":id" => $id,
+                ":company_id" => $this->company_id,
                 ":name" => $data->name,
                 ":category_id" => $categoryId,
                 ":product_code" => $data->product_code ?? null,
@@ -116,7 +122,8 @@ class ProductsController extends ApiController {
                 ":pis_aliquota" => $pis_aliquota,
                 ":cofins_aliquota" => $cofins_aliquota,
                 ":ipi_cst" => $ipi_cst,
-                ":ipi_aliquota" => $ipi_aliquota
+                ":ipi_aliquota" => $ipi_aliquota,
+                ":venda_delivery" => $venda_delivery
             ]);
 
             if (!empty($data->boxConfigs) && is_array($data->boxConfigs)) {
@@ -153,7 +160,7 @@ class ProductsController extends ApiController {
 
         try {
             $this->conn->beginTransaction();
-            $categoryId = getOrCreateCategory($this->conn, $data->category ?? "");
+            $categoryId = getOrCreateCategory($this->conn, $data->category ?? "", $this->company_id);
             $cst = isset($data->cst) ? $data->cst : '00';
             $csosn = isset($data->csosn) ? $data->csosn : '102';
             $pis_cst_entrada = isset($data->pis_cst_entrada) ? $data->pis_cst_entrada : '07';
@@ -162,6 +169,7 @@ class ProductsController extends ApiController {
             $cofins_aliquota = isset($data->cofins_aliquota) ? $data->cofins_aliquota : 0.0;
             $ipi_cst = isset($data->ipi_cst) ? $data->ipi_cst : '53';
             $ipi_aliquota = isset($data->ipi_aliquota) ? $data->ipi_aliquota : 0.0;
+            $venda_delivery = isset($data->venda_delivery) ? (int)$data->venda_delivery : 0;
 
             $stmt = $this->conn->prepare("UPDATE products SET 
                   name = :name, category_id = :category_id, product_code = :product_code, code = :code, 
@@ -172,11 +180,13 @@ class ProductsController extends ApiController {
                   cst = :cst, csosn = :csosn,
                   pis_cst_entrada = :pis_cst_entrada, pis_cst_saida = :pis_cst_saida,
                   pis_aliquota = :pis_aliquota, cofins_aliquota = :cofins_aliquota,
-                  ipi_cst = :ipi_cst, ipi_aliquota = :ipi_aliquota 
-                  WHERE id = :id");
+                  ipi_cst = :ipi_cst, ipi_aliquota = :ipi_aliquota,
+                  venda_delivery = :venda_delivery
+                  WHERE id = :id AND company_id = :company_id");
             
             $stmt->execute([
                 ":id" => $data->id,
+                ":company_id" => $this->company_id,
                 ":name" => $data->name,
                 ":category_id" => $categoryId,
                 ":product_code" => $data->product_code ?? null,
@@ -199,7 +209,8 @@ class ProductsController extends ApiController {
                 ":pis_aliquota" => $pis_aliquota,
                 ":cofins_aliquota" => $cofins_aliquota,
                 ":ipi_cst" => $ipi_cst,
-                ":ipi_aliquota" => $ipi_aliquota
+                ":ipi_aliquota" => $ipi_aliquota,
+                ":venda_delivery" => $venda_delivery
             ]);
 
             // Sincroniza Box Configs (Deleta e insere)
@@ -239,16 +250,16 @@ class ProductsController extends ApiController {
 
         if (!$id) $this->jsonResponse(["message" => "ID não fornecido"], 400);
 
-        $stmt = $this->conn->prepare("UPDATE products SET active = 0 WHERE id = :id");
-        $stmt->execute([":id" => $id]);
+        $stmt = $this->conn->prepare("UPDATE products SET active = 0 WHERE id = :id AND company_id = :company_id");
+        $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
 
         $this->jsonResponse(["message" => "Produto removido (desativado)"]);
     }
 
     public function getNextCode() {
         $this->authenticate();
-        $stmt = $this->conn->prepare("SELECT MAX(product_code) as max_code FROM products");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT MAX(product_code) as max_code FROM products WHERE company_id = :company_id");
+        $stmt->execute([':company_id' => $this->company_id]);
         $result = $stmt->fetch();
         $next = (int)($result['max_code'] ?? 0) + 1;
         $this->jsonResponse(["nextCode" => $next]);

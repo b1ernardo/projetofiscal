@@ -74,3 +74,23 @@ export const useUpdateCustomer = () => {
         }
     });
 };
+
+export const useAddCustomer = () => {
+    return useMutation({
+        mutationFn: async (data: Partial<Customer>) => {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/customers`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.message || 'Falha ao adicionar cliente');
+            }
+            return response.json();
+        }
+    });
+};

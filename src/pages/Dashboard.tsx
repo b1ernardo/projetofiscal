@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, Clock, Package, ShoppingCart, Users, ClipboardList, Warehouse } from "lucide-react";
+import { DollarSign, TrendingUp, Clock, Package, ShoppingCart, Users, ClipboardList, Warehouse, Truck } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -8,15 +8,18 @@ const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
 const quickActions = [
-  { title: "Nova Venda", icon: ShoppingCart, url: "/pdv", color: "bg-primary" },
-  { title: "Nova Comanda", icon: ClipboardList, url: "/comandas", color: "bg-success" },
-  { title: "Produtos", icon: Package, url: "/produtos", color: "bg-warning" },
-  { title: "Estoque", icon: Warehouse, url: "/estoque", color: "bg-info" },
-  { title: "Clientes", icon: Users, url: "/clientes", color: "bg-destructive" },
+  { title: "Nova Venda", icon: ShoppingCart, url: "/pdv", color: "bg-primary", permission: "pdv" },
+  { title: "Gestão Delivery", icon: Truck, url: "/delivery-painel", color: "bg-emerald-500", permission: "delivery" },
+  { title: "Nova Comanda", icon: ClipboardList, url: "/comandas", color: "bg-success", permission: "comandas" },
+  { title: "Produtos", icon: Package, url: "/produtos", color: "bg-warning", permission: "stock" },
+  { title: "Estoque", icon: Warehouse, url: "/estoque", color: "bg-info", permission: "stock" },
 ];
+
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
 
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
@@ -48,10 +51,10 @@ export default function Dashboard() {
   });
 
   const summaryCards = [
-    { title: "Despesas", value: formatCurrency(stats?.totalDespesas ?? 0), icon: DollarSign, color: "text-destructive", bg: "bg-destructive/10" },
-    { title: "Vendas Hoje", value: formatCurrency(stats?.todaySales ?? 0), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
-    { title: "Comandas Abertas", value: String(stats?.openComandas ?? 0), icon: Clock, color: "text-warning", bg: "bg-warning/10" },
-    { title: "Produtos Ativos", value: String(stats?.productCount ?? 0), icon: Package, color: "text-info", bg: "bg-info/10" },
+    { title: "Despesas", value: formatCurrency(stats?.totalDespesas ?? 0), icon: DollarSign, color: "text-destructive", bg: "bg-destructive/10", permission: "finances" },
+    { title: "Vendas Hoje", value: formatCurrency(stats?.todaySales ?? 0), icon: TrendingUp, color: "text-success", bg: "bg-success/10", permission: "pdv" },
+    { title: "Comandas Abertas", value: String(stats?.openComandas ?? 0), icon: Clock, color: "text-warning", bg: "bg-warning/10", permission: "comandas" },
+    { title: "Produtos Ativos", value: String(stats?.productCount ?? 0), icon: Package, color: "text-info", bg: "bg-info/10", permission: "stock" },
   ];
 
   return (
@@ -61,8 +64,8 @@ export default function Dashboard() {
         <p className="text-muted-foreground">Visão geral do seu negócio</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {summaryCards.map((card) => (
+      <div className="grid gap-4 sm:grid-cols-2 lg:md:grid-cols-4">
+        {summaryCards.filter(c => hasPermission(c.permission)).map((card) => (
           <Card key={card.title}>
             <CardContent className="flex items-center gap-4 p-6">
               <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${card.bg}`}>
@@ -77,8 +80,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-        {quickActions.map((action) => (
+      <div className="grid gap-3 grid-cols-2 sm:md:grid-cols-3 lg:md:grid-cols-5">
+        {quickActions.filter(a => hasPermission(a.permission)).map((action) => (
           <button key={action.title} onClick={() => navigate(action.url)} className="flex flex-col items-center gap-2 rounded-xl border bg-card p-4 transition-colors hover:bg-accent">
             <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${action.color}`}>
               <action.icon className="h-5 w-5 text-primary-foreground" />

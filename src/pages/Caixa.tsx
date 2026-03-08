@@ -105,7 +105,10 @@ export default function Caixa() {
   const totalSangrias = summary?.totalSangrias ?? 0;
   const totalSuprimentos = summary?.totalSuprimentos ?? 0;
   const openingBalance = summary?.openingBalance ?? 0;
-  const saldo = summary?.closingBalance ?? (openingBalance + totalVendas - totalSangrias + totalSuprimentos);
+
+  const totalEntradas = openingBalance + totalVendas + totalSuprimentos;
+  const totalSaidas = totalSangrias;
+  const saldo = summary?.closingBalance ?? (totalEntradas - totalSaidas);
 
   // Combine sales and cash movements into a unified timeline
   const allMovements = [
@@ -176,15 +179,15 @@ export default function Caixa() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:md:grid-cols-3">
         <Card>
           <CardContent className="flex items-center gap-4 p-6">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-success/10">
               <DollarSign className="h-6 w-6 text-success" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Vendas</p>
-              <p className="text-xl font-bold">{formatCurrency(totalVendas)}</p>
+              <p className="text-sm text-muted-foreground">Total Entradas</p>
+              <p className="text-xl font-bold">{formatCurrency(totalEntradas)}</p>
             </div>
           </CardContent>
         </Card>
@@ -194,8 +197,8 @@ export default function Caixa() {
               <ArrowDownCircle className="h-6 w-6 text-destructive" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Sangrias</p>
-              <p className="text-xl font-bold">{formatCurrency(totalSangrias)}</p>
+              <p className="text-sm text-muted-foreground">Total Saídas</p>
+              <p className="text-xl font-bold">{formatCurrency(totalSaidas)}</p>
             </div>
           </CardContent>
         </Card>

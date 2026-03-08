@@ -52,7 +52,7 @@ export function ReceiptOptionsDialog({ open, onOpenChange, onEmitNFCe, onPrintRe
         return null;
     }
 
-    const gridCols = visibleCount === 1 ? "grid-cols-1" : visibleCount === 2 ? "grid-cols-2" : "grid-cols-3";
+    const gridCols = visibleCount === 1 ? "grid-cols-1" : visibleCount === 2 ? "grid-cols-2" : "md:grid-cols-3";
     const maxWidth = visibleCount === 1 ? "sm:max-w-[300px]" : visibleCount === 2 ? "sm:max-w-[450px]" : "sm:max-w-[650px]";
 
     return (

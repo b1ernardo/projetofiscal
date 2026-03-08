@@ -12,9 +12,10 @@ class FiscalController extends ApiController {
     }
 
     public function getConfig() {
+        $this->authenticate();
         try {
-            $stmt = $this->db->prepare("SELECT * FROM config_fiscal LIMIT 1");
-            $stmt->execute();
+            $stmt = $this->db->prepare("SELECT * FROM config_fiscal WHERE company_id = :company_id LIMIT 1");
+            $stmt->execute([':company_id' => $this->company_id]);
             $config = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($config) {
@@ -31,6 +32,7 @@ class FiscalController extends ApiController {
     }
 
     public function saveConfig() {
+        $this->authenticate();
         $data = json_decode(file_get_contents("php://input"), true);
         
         if (!$data) {
@@ -41,8 +43,8 @@ class FiscalController extends ApiController {
 
         try {
             // Verificar se já existe config
-            $stmt = $this->db->prepare("SELECT id FROM config_fiscal LIMIT 1");
-            $stmt->execute();
+            $stmt = $this->db->prepare("SELECT id FROM config_fiscal WHERE company_id = :company_id LIMIT 1");
+            $stmt->execute([':company_id' => $this->company_id]);
             $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
             $fields = [
@@ -67,8 +69,8 @@ class FiscalController extends ApiController {
 
             $sets = array_map(fn($f) => "`$f` = :$f", $fields);
             $sql = $existing 
-                ? "UPDATE config_fiscal SET " . implode(", ", $sets) . " WHERE id = :id"
-                : "INSERT INTO config_fiscal SET " . implode(", ", $sets);
+                ? "UPDATE config_fiscal SET " . implode(", ", $sets) . " WHERE id = :id AND company_id = :company_id"
+                : "INSERT INTO config_fiscal SET company_id = :company_id, " . implode(", ", $sets);
 
             $stmt = $this->db->prepare($sql);
             
@@ -78,6 +80,9 @@ class FiscalController extends ApiController {
 
             if ($existing) {
                 $stmt->bindValue(":id", $existing['id']);
+                $stmt->bindValue(":company_id", $this->company_id);
+            } else {
+                $stmt->bindValue(":company_id", $this->company_id);
             }
 
             $stmt->execute();
@@ -114,19 +119,21 @@ class FiscalController extends ApiController {
 
             if ($isExistingSale) {
                 // Update Sale - only update fields that exist in the schema
-                $stmt = $this->db->prepare("UPDATE sales SET total_amount = :total, payment_method = :method, discount = :discount WHERE id = :id");
+                $stmt = $this->db->prepare("UPDATE sales SET total_amount = :total, payment_method = :method, discount = :discount WHERE id = :id AND company_id = :company_id");
                 $stmt->execute([
                     ":id" => $saleId,
+                    ":company_id" => $this->company_id,
                     ":total" => $totalAmount,
                     ":method" => $paymentMethod,
                     ":discount" => $discount,
                 ]);
             } else {
-                // 1. Criar Venda (sem customer_name/customer_doc - não existem no schema)
-                $stmt = $this->db->prepare("INSERT INTO sales (id, total_amount, payment_method, created_by, status, discount) 
-                                            VALUES (:id, :total, :method, :uid, 'completed', :discount)");
+                // 1. Criar Venda
+                $stmt = $this->db->prepare("INSERT INTO sales (id, company_id, total_amount, payment_method, created_by, status, discount) 
+                                            VALUES (:id, :company_id, :total, :method, :uid, 'completed', :discount)");
                 $stmt->execute([
                     ":id" => $saleId,
+                    ":company_id" => $this->company_id,
                     ":total" => $totalAmount,
                     ":method" => $paymentMethod,
                     ":uid" => $auth['id'] ?? null,
@@ -135,11 +142,12 @@ class FiscalController extends ApiController {
 
                 // 2. Inserir Itens
                 foreach ($data['items'] as $item) {
-                    $stmt = $this->db->prepare("INSERT INTO sale_items (id, sale_id, product_id, quantity, unit_price) 
-                                                VALUES (:id, :sale_id, NULL, :qty, :price)");
+                    $stmt = $this->db->prepare("INSERT INTO sale_items (id, company_id, sale_id, product_id, quantity, unit_price) 
+                                                VALUES (:id, :company_id, :sale_id, NULL, :qty, :price)");
                     try {
                         $stmt->execute([
                             ":id" => bin2hex(random_bytes(16)),
+                            ":company_id" => $this->company_id,
                             ":sale_id" => $saleId,
                             ":qty" => $item['quantity'],
                             ":price" => $item['unit_price'],
@@ -207,7 +215,7 @@ class FiscalController extends ApiController {
             ]);
 
             // Atualizar config
-            $this->db->prepare("UPDATE config_fiscal SET ultimo_numero_nfe = :num")->execute([":num" => $res['nNF']]);
+            $this->db->prepare("UPDATE config_fiscal SET ultimo_numero_nfe = :num WHERE company_id = :company_id")->execute([":num" => $res['nNF'], ":company_id" => $this->company_id]);
 
             $this->db->commit();
 
@@ -313,8 +321,8 @@ class FiscalController extends ApiController {
         $tipo   = strtoupper($_GET['tipo']   ?? 'NFE'); // NFE | NFCE
         $search = trim($_GET['search'] ?? '');
 
-        $where  = "fn.tipo = :tipo";
-        $params = [':tipo' => $tipo];
+        $where  = "fn.tipo = :tipo AND (s.company_id = :company_id OR s.company_id IS NULL)";
+        $params = [':tipo' => $tipo, ':company_id' => $this->company_id];
 
         if ($search) {
             $where .= " AND (fn.numero LIKE :search OR fn.chave LIKE :search OR c.name LIKE :search)";
@@ -366,8 +374,8 @@ class FiscalController extends ApiController {
             $model = $data['model'] ?? '55'; // 55 = NFe, 65 = NFCe
             
             // Busca a Venda no banco
-            $stmt = $this->db->prepare("SELECT s.*, c.cpf_cnpj as c_doc, c.name as c_name, c.email as c_email, c.address as c_address FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE s.id = :id");
-            $stmt->execute([':id' => $data['saleId']]);
+            $stmt = $this->db->prepare("SELECT s.*, c.cpf_cnpj as c_doc, c.name as c_name, c.email as c_email, c.address as c_address FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE s.id = :id AND s.company_id = :company_id");
+            $stmt->execute([':id' => $data['saleId'], ':company_id' => $this->company_id]);
             $sale = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$sale) {
@@ -389,8 +397,8 @@ class FiscalController extends ApiController {
             ];
 
             // Busca os Itens da Venda
-            $stmtItems = $this->db->prepare("SELECT si.*, p.name, p.code, p.ncm, p.cest, p.cfop_padrao, p.unit, p.cst, p.csosn, p.origem FROM sale_items si JOIN products p ON si.product_id = p.id WHERE si.sale_id = :id");
-            $stmtItems->execute([':id' => $data['saleId']]);
+            $stmtItems = $this->db->prepare("SELECT si.*, p.name, p.code, p.ncm, p.cest, p.cfop_padrao, p.unit, p.cst, p.csosn, p.origem FROM sale_items si JOIN products p ON si.product_id = p.id JOIN sales s ON si.sale_id = s.id WHERE si.sale_id = :id AND s.company_id = :company_id");
+            $stmtItems->execute([':id' => $data['saleId'], ':company_id' => $this->company_id]);
             $items = $stmtItems->fetchAll(PDO::FETCH_ASSOC);
 
             if (!$items) {
@@ -422,7 +430,7 @@ class FiscalController extends ApiController {
 
             // Atualizar controle de última numeração emitida
             $field = ($model == '55') ? 'ultimo_numero_nfe' : 'ultimo_numero_nfce';
-            $this->db->prepare("UPDATE config_fiscal SET $field = :num")->execute([":num" => $res['nNF']]);
+            $this->db->prepare("UPDATE config_fiscal SET $field = :num WHERE company_id = :company_id")->execute([":num" => $res['nNF'], ":company_id" => $this->company_id]);
 
             echo json_encode([
                 "message" => "Nota autorizada com sucesso na Sefaz!",
@@ -454,8 +462,8 @@ class FiscalController extends ApiController {
         }
 
         try {
-            $stmt = $this->db->prepare("SELECT id, xml_path, tipo FROM fiscal_notes WHERE sale_id = :sale_id AND status = 'generated' ORDER BY created_at DESC LIMIT 1");
-            $stmt->execute([":sale_id" => $data['saleId']]);
+            $stmt = $this->db->prepare("SELECT fn.id, fn.xml_path, fn.tipo FROM fiscal_notes fn JOIN sales s ON fn.sale_id = s.id WHERE fn.sale_id = :sale_id AND fn.status = 'generated' AND s.company_id = :company_id ORDER BY fn.created_at DESC LIMIT 1");
+            $stmt->execute([":sale_id" => $data['saleId'], ":company_id" => $this->company_id]);
             $note = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$note) {
@@ -544,9 +552,10 @@ class FiscalController extends ApiController {
     }
 
     public function downloadXml($noteId) {
+        $this->authenticate();
         try {
-            $stmt = $this->db->prepare("SELECT numero, xml_path FROM fiscal_notes WHERE id = :id");
-            $stmt->execute([':id' => $noteId]);
+            $stmt = $this->db->prepare("SELECT fn.numero, fn.xml_path FROM fiscal_notes fn JOIN sales s ON fn.sale_id = s.id WHERE fn.id = :id AND s.company_id = :company_id");
+            $stmt->execute([':id' => $noteId, ':company_id' => $this->company_id]);
             $nota = $stmt->fetch();
 
             if (!$nota || empty($nota['xml_path'])) {

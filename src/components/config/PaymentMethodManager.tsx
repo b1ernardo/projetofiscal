@@ -50,14 +50,14 @@ export function PaymentMethodManager() {
     setLoading(false);
   };
 
-  const toggleActive = async (id: string, active: boolean) => {
+  const toggleActive = async (id: string, active: boolean, field: 'active' | 'show_in_delivery') => {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/payment_methods/${id}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ active: !active })
+      body: JSON.stringify({ [field]: !active })
     });
 
     if (response.ok) {
@@ -102,13 +102,13 @@ export function PaymentMethodManager() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-4">
         <CardTitle>Formas de Pagamento</CardTitle>
         <CardDescription>Gerencie as formas de pagamento disponíveis.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="flex gap-2">
+          <div className="flex gap-2 mb-2">
             <Input
               placeholder="Nova forma de pagamento..."
               value={newName}
@@ -119,23 +119,24 @@ export function PaymentMethodManager() {
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          <div className="space-y-2 max-h-60 overflow-auto">
+          <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-muted-foreground uppercase px-2 mb-1">
+            <div className="col-span-5">Nome</div>
+            <div className="col-span-3 text-center">Ativo</div>
+            <div className="col-span-3 text-center">Delivery</div>
+            <div className="col-span-1"></div>
+          </div>
+          <div className="space-y-1.5 max-h-[400px] overflow-auto pr-1">
             {methods.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">Nenhuma forma cadastrada</p>
             ) : (
-              methods.map((m) => (
-                <div key={m.id} className="flex items-center justify-between rounded-lg border p-2">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Switch
-                      checked={m.active}
-                      onCheckedChange={() => toggleActive(m.id, m.active)}
-                      disabled={editingId === m.id}
-                    />
+              methods.map((m: any) => (
+                <div key={m.id} className="grid grid-cols-12 gap-2 items-center rounded-lg border p-2 hover:bg-muted/30 transition-colors">
+                  <div className="col-span-5 flex items-center gap-2 overflow-hidden">
                     {editingId === m.id ? (
                       <Input
                         value={editingName}
                         onChange={(e) => setEditingName(e.target.value)}
-                        className="h-8 py-0"
+                        className="h-8 py-0 px-2 text-xs"
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === "Enter") saveEdit(m.id);
@@ -143,33 +144,42 @@ export function PaymentMethodManager() {
                         }}
                       />
                     ) : (
-                      <span className={`text-sm font-medium ${!m.active ? "text-muted-foreground line-through" : ""}`}>
+                      <span className={`text-xs font-semibold truncate ${!m.active ? "text-muted-foreground line-through opacity-50" : ""}`}>
                         {m.name}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 ml-2">
+                  <div className="col-span-3 flex justify-center">
+                    <Switch
+                      checked={m.active}
+                      onCheckedChange={() => toggleActive(m.id, m.active, 'active')}
+                      className="scale-75"
+                    />
+                  </div>
+                  <div className="col-span-3 flex justify-center">
+                    <Switch
+                      checked={!!parseInt(m.show_in_delivery)}
+                      onCheckedChange={() => toggleActive(m.id, !!parseInt(m.show_in_delivery), 'show_in_delivery')}
+                      className="scale-75"
+                    />
+                  </div>
+                  <div className="col-span-1 flex items-center justify-end gap-1">
                     {editingId === m.id ? (
-                      <>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => saveEdit(m.id)} disabled={loading}>
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => setEditingId(null)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-green-600 p-0" onClick={() => saveEdit(m.id)} disabled={loading}>
+                        <Check className="h-4 w-4" />
+                      </Button>
                     ) : (
-                      <>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => {
+                      <div className="flex">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground p-0" onClick={() => {
                           setEditingId(m.id);
                           setEditingName(m.name);
                         }}>
-                          <Edit2 className="h-3 w-3" />
+                          <Edit2 className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMethod(m.id)}>
-                          <Trash2 className="h-3 w-3" />
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive p-0" onClick={() => deleteMethod(m.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      </>
+                      </div>
                     )}
                   </div>
                 </div>

@@ -24,15 +24,24 @@ class NaturezasController extends ApiController {
         $this->authenticate();
         $this->ensureColumns();
         $search = trim($_GET['search'] ?? '');
+        
+        $sql = "SELECT n.*, (pe.natureza_id IS NOT NULL) as padrao 
+                FROM naturezas_operacao n 
+                LEFT JOIN natureza_padrao_empresa pe ON (pe.natureza_id = n.id AND pe.company_id = :company_id)
+                WHERE (n.company_id = :company_id OR n.company_id IS NULL) ";
+        
         if ($search) {
-            $stmt = $this->conn->prepare(
-                "SELECT * FROM naturezas_operacao WHERE descricao LIKE :s OR cfop LIKE :s ORDER BY padrao DESC, descricao ASC"
-            );
-            $stmt->execute([':s' => "%$search%"]);
-        } else {
-            $stmt = $this->conn->prepare("SELECT * FROM naturezas_operacao ORDER BY padrao DESC, descricao ASC");
-            $stmt->execute();
+            $sql .= " AND (n.descricao LIKE :s OR n.cfop LIKE :s) ";
         }
+        $sql .= " ORDER BY padrao DESC, n.descricao ASC";
+        
+        $stmt = $this->conn->prepare($sql);
+        $params = [':company_id' => $this->company_id];
+        if ($search) {
+            $params[':s'] = "%$search%";
+        }
+        $stmt->execute($params);
+        
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) { $r['padrao'] = (bool)(int)$r['padrao']; }
         $this->jsonResponse($rows);
@@ -52,35 +61,35 @@ class NaturezasController extends ApiController {
         $descricao = substr(strtoupper(trim($data->descricao)), 0, 60);
         $cfop      = isset($data->cfop) ? preg_replace('/\D/', '', $data->cfop) : null;
 
-        // Verifica duplicação
-        $stmtCheck = $this->conn->prepare("SELECT id FROM naturezas_operacao WHERE UPPER(descricao) = :descricao LIMIT 1");
-        $stmtCheck->execute([":descricao" => $descricao]);
+        // Verifica duplicação (tanto nas privadas quanto nas globais)
+        $stmtCheck = $this->conn->prepare("SELECT id FROM naturezas_operacao WHERE UPPER(descricao) = :descricao AND (company_id = :company_id OR company_id IS NULL) LIMIT 1");
+        $stmtCheck->execute([":descricao" => $descricao, ":company_id" => $this->company_id]);
         if ($stmtCheck->fetchColumn()) {
             $this->jsonResponse(["message" => "Esta Natureza da Operação já existe"], 409);
         }
 
         $id = generateUUID();
-        $stmt = $this->conn->prepare("INSERT INTO naturezas_operacao (id, descricao, cfop) VALUES (:id, :descricao, :cfop)");
-        $stmt->execute([":id" => $id, ":descricao" => $descricao, ":cfop" => $cfop ?: null]);
+        $stmt = $this->conn->prepare("INSERT INTO naturezas_operacao (id, company_id, descricao, cfop) VALUES (:id, :company_id, :descricao, :cfop)");
+        $stmt->execute([":id" => $id, ":company_id" => $this->company_id, ":descricao" => $descricao, ":cfop" => $cfop ?: null]);
 
         $this->jsonResponse(["message" => "Natureza de Operação cadastrada", "id" => $id], 201);
     }
 
     public function setPadrao($id) {
         $this->authenticate();
-        $this->ensureColumns();
         try {
             $this->conn->beginTransaction();
-            // Remove padrão de todos
-            $this->conn->exec("UPDATE naturezas_operacao SET padrao = 0");
-            // Define no selecionado
-            $stmt = $this->conn->prepare("UPDATE naturezas_operacao SET padrao = 1 WHERE id = :id");
-            $stmt->execute([":id" => $id]);
+            // Remove favorito atual para esta empresa
+            $stmtReset = $this->conn->prepare("DELETE FROM natureza_padrao_empresa WHERE company_id = :company_id");
+            $stmtReset->execute([':company_id' => $this->company_id]);
+            // Define o novo favorito (pode ser global ou customizado)
+            $stmt = $this->conn->prepare("INSERT INTO natureza_padrao_empresa (company_id, natureza_id) VALUES (:company_id, :id)");
+            $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
             $this->conn->commit();
-            $this->jsonResponse(["message" => "Natureza padrão definida com sucesso"]);
+            $this->jsonResponse(["message" => "Natureza de operação favorita definida!"]);
         } catch (\Exception $e) {
             if ($this->conn->inTransaction()) $this->conn->rollBack();
-            $this->jsonResponse(["message" => "Erro ao definir padrão: " . $e->getMessage()], 500);
+            $this->jsonResponse(["message" => "Erro ao definir favorita: " . $e->getMessage()], 500);
         }
     }
 
@@ -91,8 +100,8 @@ class NaturezasController extends ApiController {
             $this->jsonResponse(["message" => "ID não fornecido"], 400);
         }
 
-        $stmt = $this->conn->prepare("DELETE FROM naturezas_operacao WHERE id = :id");
-        $stmt->execute([":id" => $id]);
+        $stmt = $this->conn->prepare("DELETE FROM naturezas_operacao WHERE id = :id AND company_id = :company_id");
+        $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
 
         $this->jsonResponse(["message" => "Natureza excluída com sucesso"]);
     }

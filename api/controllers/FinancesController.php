@@ -12,9 +12,10 @@ class FinancesController extends ApiController {
         $query = "SELECT ap.*, s.name as supplier_name 
                   FROM accounts_payable ap 
                   LEFT JOIN suppliers s ON ap.supplier_id = s.id 
+                  WHERE ap.company_id = :company_id
                   ORDER BY ap.due_date ASC";
         $stmt = $this->conn->prepare($query);
-        $stmt->execute();
+        $stmt->execute([':company_id' => $this->company_id]);
         $this->jsonResponse($stmt->fetchAll(PDO::FETCH_ASSOC));
     }
 
@@ -27,12 +28,13 @@ class FinancesController extends ApiController {
         }
 
         $id = bin2hex(random_bytes(18));
-        $query = "INSERT INTO accounts_payable (id, description, supplier_id, amount, due_date, status, payment_date, category, payment_method) 
-                  VALUES (:id, :description, :supplier_id, :amount, :due_date, :status, :payment_date, :category, :payment_method)";
+        $query = "INSERT INTO accounts_payable (id, company_id, description, supplier_id, amount, due_date, status, payment_date, category, payment_method) 
+                  VALUES (:id, :company_id, :description, :supplier_id, :amount, :due_date, :status, :payment_date, :category, :payment_method)";
         
         $stmt = $this->conn->prepare($query);
         $stmt->execute([
             ':id' => $id,
+            ':company_id' => $this->company_id,
             ':description' => $data->description,
             ':supplier_id' => $data->supplier_id ?? null,
             ':amount' => $data->amount,
@@ -51,8 +53,8 @@ class FinancesController extends ApiController {
         $data = $this->getPostData();
 
         // Check if status is changing to 'paid'
-        $stmt = $this->conn->prepare("SELECT status FROM accounts_payable WHERE id = :id");
-        $stmt->execute([':id' => $id]);
+        $stmt = $this->conn->prepare("SELECT status FROM accounts_payable WHERE id = :id AND company_id = :company_id");
+        $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
         $oldStatus = $stmt->fetchColumn();
 
         $query = "UPDATE accounts_payable SET 
@@ -64,12 +66,13 @@ class FinancesController extends ApiController {
                   payment_date = :payment_date,
                   category = :category,
                   payment_method = :payment_method
-                  WHERE id = :id";
+                  WHERE id = :id AND company_id = :company_id";
         
         $stmt = $this->conn->prepare($query);
         try {
             $stmt->execute([
                 ':id' => $id,
+                ':company_id' => $this->company_id,
                 ':description' => $data->description,
                 ':supplier_id' => $data->supplier_id ?? null,
                 ':amount' => $data->amount,
@@ -82,16 +85,17 @@ class FinancesController extends ApiController {
 
             // If it was pending and is now paid, create cash movement (negative)
             if ($oldStatus !== 'paid' && $data->status === 'paid') {
-                $stmtReg = $this->conn->prepare("SELECT id FROM cash_registers WHERE closed_at IS NULL ORDER BY opened_at DESC LIMIT 1");
-                $stmtReg->execute();
+                $stmtReg = $this->conn->prepare("SELECT id FROM cash_registers WHERE closed_at IS NULL AND company_id = :company_id ORDER BY opened_at DESC LIMIT 1");
+                $stmtReg->execute([':company_id' => $this->company_id]);
                 $register = $stmtReg->fetch();
 
                 if ($register) {
                     require_once __DIR__ . '/../utils.php';
-                    $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, cash_register_id, amount, type, observation, created_by) 
-                                                      VALUES (:move_id, :reg_id, :amount, 'saida', :obs, :uid)");
+                    $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by) 
+                                                      VALUES (:move_id, :company_id, :reg_id, :amount, 'saida', :obs, :uid)");
                     $stmtMove->execute([
                         ":move_id" => generateUUID(),
+                        ":company_id" => $this->company_id,
                         ":reg_id" => $register['id'],
                         ":amount" => -$data->amount,
                         ":obs" => "Pagamento: {$data->description}" . ($data->payment_method ? " ({$data->payment_method})" : ""),
@@ -111,9 +115,9 @@ class FinancesController extends ApiController {
 
     public function deletePayable($id) {
         $this->authenticate();
-        $query = "DELETE FROM accounts_payable WHERE id = :id";
+        $query = "DELETE FROM accounts_payable WHERE id = :id AND company_id = :company_id";
         $stmt = $this->conn->prepare($query);
-        $stmt->execute([':id' => $id]);
+        $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
         $this->jsonResponse(["message" => "Account payable deleted"]);
     }
 
@@ -124,9 +128,10 @@ class FinancesController extends ApiController {
         $query = "SELECT ar.*, c.name as customer_name 
                   FROM accounts_receivable ar 
                   LEFT JOIN customers c ON ar.customer_id = c.id 
+                  WHERE ar.company_id = :company_id
                   ORDER BY ar.due_date ASC";
         $stmt = $this->conn->prepare($query);
-        $stmt->execute();
+        $stmt->execute([':company_id' => $this->company_id]);
         $this->jsonResponse($stmt->fetchAll(PDO::FETCH_ASSOC));
     }
 
@@ -139,12 +144,13 @@ class FinancesController extends ApiController {
         }
 
         $id = bin2hex(random_bytes(18));
-        $query = "INSERT INTO accounts_receivable (id, description, customer_id, amount, due_date, status, payment_date, category, payment_method) 
-                  VALUES (:id, :description, :customer_id, :amount, :due_date, :status, :payment_date, :category, :payment_method)";
+        $query = "INSERT INTO accounts_receivable (id, company_id, description, customer_id, amount, due_date, status, payment_date, category, payment_method) 
+                  VALUES (:id, :company_id, :description, :customer_id, :amount, :due_date, :status, :payment_date, :category, :payment_method)";
         
         $stmt = $this->conn->prepare($query);
         $stmt->execute([
             ':id' => $id,
+            ':company_id' => $this->company_id,
             ':description' => $data->description,
             ':customer_id' => $data->customer_id ?? null,
             ':amount' => $data->amount,
@@ -163,8 +169,8 @@ class FinancesController extends ApiController {
         $data = $this->getPostData();
 
         // Check if status is changing to 'paid'
-        $stmt = $this->conn->prepare("SELECT status FROM accounts_receivable WHERE id = :id");
-        $stmt->execute([':id' => $id]);
+        $stmt = $this->conn->prepare("SELECT status FROM accounts_receivable WHERE id = :id AND company_id = :company_id");
+        $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
         $oldStatus = $stmt->fetchColumn();
 
         $query = "UPDATE accounts_receivable SET 
@@ -176,11 +182,12 @@ class FinancesController extends ApiController {
                   payment_date = :payment_date,
                   category = :category,
                   payment_method = :payment_method
-                  WHERE id = :id";
+                  WHERE id = :id AND company_id = :company_id";
         
         $stmt = $this->conn->prepare($query);
         $stmt->execute([
             ':id' => $id,
+            ':company_id' => $this->company_id,
             ':description' => $data->description,
             ':customer_id' => $data->customer_id ?? null,
             ':amount' => $data->amount,
@@ -193,16 +200,17 @@ class FinancesController extends ApiController {
 
         // If it was pending/overdue and is now paid, create cash movement (positive)
         if ($oldStatus !== 'paid' && $data->status === 'paid') {
-            $stmtReg = $this->conn->prepare("SELECT id FROM cash_registers WHERE closed_at IS NULL ORDER BY opened_at DESC LIMIT 1");
-            $stmtReg->execute();
+            $stmtReg = $this->conn->prepare("SELECT id FROM cash_registers WHERE closed_at IS NULL AND company_id = :company_id ORDER BY opened_at DESC LIMIT 1");
+            $stmtReg->execute([':company_id' => $this->company_id]);
             $register = $stmtReg->fetch();
 
             if ($register) {
                 require_once __DIR__ . '/../utils.php';
-                $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, cash_register_id, amount, type, observation, created_by) 
-                                                  VALUES (:move_id, :reg_id, :amount, 'entrada', :obs, :uid)");
+                $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by) 
+                                                  VALUES (:move_id, :company_id, :reg_id, :amount, 'entrada', :obs, :uid)");
                 $stmtMove->execute([
                     ":move_id" => generateUUID(),
+                    ":company_id" => $this->company_id,
                     ":reg_id" => $register['id'],
                     ":amount" => $data->amount,
                     ":obs" => "Recebimento: {$data->description}" . ($data->payment_method ? " ({$data->payment_method})" : ""),
@@ -216,9 +224,9 @@ class FinancesController extends ApiController {
 
     public function deleteReceivable($id) {
         $this->authenticate();
-        $query = "DELETE FROM accounts_receivable WHERE id = :id";
+        $query = "DELETE FROM accounts_receivable WHERE id = :id AND company_id = :company_id";
         $stmt = $this->conn->prepare($query);
-        $stmt->execute([':id' => $id]);
+        $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
         $this->jsonResponse(["message" => "Account receivable deleted"]);
     }
 }

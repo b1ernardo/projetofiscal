@@ -11,19 +11,19 @@ function generateUUID() {
     );
 }
 
-function getOrCreateCategory($conn, $name) {
-    if (empty($name)) return null;
+function getOrCreateCategory($conn, $name, $company_id) {
+    if (empty($name) || empty($company_id)) return null;
     $name = trim($name);
 
-    $stmt = $conn->prepare("SELECT id FROM categories WHERE name = :name LIMIT 1");
-    $stmt->execute([':name' => $name]);
+    $stmt = $conn->prepare("SELECT id FROM categories WHERE name = :name AND company_id = :company_id LIMIT 1");
+    $stmt->execute([':name' => $name, ':company_id' => $company_id]);
     $row = $stmt->fetch();
 
     if ($row) return $row['id'];
 
     $id = generateUUID();
-    $stmt = $conn->prepare("INSERT INTO categories (id, name) VALUES (:id, :name)");
-    $stmt->execute([':id' => $id, ':name' => $name]);
+    $stmt = $conn->prepare("INSERT INTO categories (id, company_id, name) VALUES (:id, :company_id, :name)");
+    $stmt->execute([':id' => $id, ':company_id' => $company_id, ':name' => $name]);
 
     return $id;
 }

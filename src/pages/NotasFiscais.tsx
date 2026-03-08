@@ -153,7 +153,7 @@ export default function NotasFiscais({ tipo }: { tipo: "NFE" | "NFCE" }) {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:md:grid-cols-4 gap-4">
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Total Transmitidas</CardTitle>

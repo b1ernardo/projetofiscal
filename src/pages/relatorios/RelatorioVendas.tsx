@@ -36,12 +36,9 @@ export default function RelatorioVendas() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/relatorios")}><ArrowLeft className="h-5 w-5" /></Button>
-        <div>
-          <h1 className="text-2xl font-bold">Vendas por Período</h1>
-          <p className="text-muted-foreground">Relatório detalhado de vendas com filtros por data</p>
-        </div>
+      <div className="flex flex-col gap-1 pb-4">
+        <h3 className="text-xl font-bold">Vendas por Período</h3>
+        <p className="text-sm text-muted-foreground">Relatório detalhado de vendas com filtros por data</p>
       </div>
 
       <Card>
@@ -57,7 +54,7 @@ export default function RelatorioVendas() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:md:grid-cols-3">
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><DollarSign className="h-5 w-5" /></div>

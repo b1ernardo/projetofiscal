@@ -143,7 +143,7 @@ export function CheckoutDialog({ open, onOpenChange, total, onConfirm }: Checkou
           </div>
 
           <p className="text-sm font-medium">Formas de Pagamento</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid md:grid-cols-3 gap-2">
             {methods.map((m) => (
               <button
                 key={m.id}

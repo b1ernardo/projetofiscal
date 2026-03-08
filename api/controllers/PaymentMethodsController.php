@@ -7,8 +7,8 @@ class PaymentMethodsController extends ApiController {
     
     public function list() {
         $this->authenticate();
-        $stmt = $this->conn->prepare("SELECT id, name, active FROM payment_methods ORDER BY name ASC");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT id, name, active, show_in_delivery FROM payment_methods WHERE company_id = :company_id ORDER BY name ASC");
+        $stmt->execute([':company_id' => $this->company_id]);
         $this->jsonResponse($stmt->fetchAll());
     }
 
@@ -22,9 +22,10 @@ class PaymentMethodsController extends ApiController {
         }
 
         $id = generateUUID();
-        $stmt = $this->conn->prepare("INSERT INTO payment_methods (id, name, active) VALUES (:id, :name, 1)");
+        $stmt = $this->conn->prepare("INSERT INTO payment_methods (id, company_id, name, active, show_in_delivery) VALUES (:id, :company_id, :name, 1, 1)");
         $stmt->execute([
             ":id" => $id,
+            ":company_id" => $this->company_id,
             ":name" => $data->name
         ]);
 
@@ -35,18 +36,30 @@ class PaymentMethodsController extends ApiController {
         $this->authenticate();
         $data = $this->getPostData();
 
-        $sql = "UPDATE payment_methods SET active = :active";
-        $params = [
-            ":active" => isset($data->active) ? ($data->active ? 1 : 0) : 1,
-            ":id" => $id
-        ];
+        $updates = [];
+        $params = [":id" => $id, ":company_id" => $this->company_id];
+
+        if (isset($data->active)) {
+            $updates[] = "active = :active";
+            $params[":active"] = $data->active ? 1 : 0;
+        }
+
+        if (isset($data->show_in_delivery)) {
+            $updates[] = "show_in_delivery = :show_in_delivery";
+            $params[":show_in_delivery"] = $data->show_in_delivery ? 1 : 0;
+        }
 
         if (!empty($data->name)) {
-            $sql .= ", name = :name";
+            $updates[] = "name = :name";
             $params[":name"] = $data->name;
         }
 
-        $sql .= " WHERE id = :id";
+        if (empty($updates)) {
+            $this->jsonResponse(["message" => "Nenhum dado para atualizar"], 400);
+            return;
+        }
+
+        $sql = "UPDATE payment_methods SET " . implode(", ", $updates) . " WHERE id = :id AND company_id = :company_id";
         $stmt = $this->conn->prepare($sql);
         $stmt->execute($params);
 
@@ -56,8 +69,8 @@ class PaymentMethodsController extends ApiController {
     public function delete($id) {
         $this->authenticate();
         try {
-            $stmt = $this->conn->prepare("DELETE FROM payment_methods WHERE id = :id");
-            $stmt->execute([":id" => $id]);
+            $stmt = $this->conn->prepare("DELETE FROM payment_methods WHERE id = :id AND company_id = :company_id");
+            $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
             $this->jsonResponse(["message" => "Forma de pagamento removida"]);
         } catch (Exception $e) {
             $this->jsonResponse(["message" => "Não foi possível remover."], 400);

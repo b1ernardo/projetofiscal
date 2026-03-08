@@ -19,13 +19,14 @@ interface SaveSaleParams {
   userId: string;
   discount?: number;
   customerId?: string;
+  sellerId?: string;
 }
 
 export function useSaveSale() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ cart, total, payments, userId, discount = 0, customerId }: SaveSaleParams) => {
+    mutationFn: async ({ cart, total, payments, userId, discount = 0, customerId, sellerId }: SaveSaleParams) => {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/sales`, {
         method: 'POST',
         headers: {
@@ -38,7 +39,8 @@ export function useSaveSale() {
           payments,
           userId,
           discount,
-          customerId
+          customerId,
+          sellerId
         }),
       });
 

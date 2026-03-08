@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { CheckoutDialog } from "@/components/pdv/CheckoutDialog";
 import { ReceiptOptionsDialog } from "@/components/pdv/ReceiptOptionsDialog";
 import { useFiscal } from "@/hooks/useFiscal";
-import { printReceipt, getWhatsappUrl } from "@/utils/printReceipt";
+import { printReceipt, getWhatsappUrl, printComandaItem } from "@/utils/printReceipt";
 
 interface ComandaDetailDialogProps {
     open: boolean;
@@ -59,10 +59,18 @@ export function ComandaDetailDialog({ open, onOpenChange, comandaId }) {
             });
             return response.json();
         },
-        onSuccess: () => {
+        onSuccess: (res, variables) => {
             queryClient.invalidateQueries({ queryKey: ["comanda", comandaId] });
             queryClient.invalidateQueries({ queryKey: ["comandas"] });
             toast.success("Item adicionado");
+
+            const autoPrint = localStorage.getItem("pdv_auto_print_comanda") === "true";
+            if (autoPrint) {
+                const product = products.find((p: any) => p.id === variables.productId);
+                if (product) {
+                    printComandaItem(comanda?.table_number || comandaId, product.name, variables.quantity);
+                }
+            }
         },
         onError: () => toast.error("Erro ao adicionar item")
     });
@@ -230,7 +238,7 @@ export function ComandaDetailDialog({ open, onOpenChange, comandaId }) {
                     </div>
 
                     {/* Tabela de Itens */}
-                    <div className="border rounded-md">
+                    <div className="border rounded-md overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>

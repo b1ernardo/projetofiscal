@@ -6,6 +6,7 @@ import { Plus, Users, UtensilsCrossed, Clock, Check } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ComandaFormDialog } from "@/components/comandas/ComandaFormDialog";
+import { printComandaBatch } from "@/utils/printReceipt";
 
 interface SaveToComandaDialogProps {
     open: boolean;
@@ -43,9 +44,17 @@ export function SaveToComandaDialog({ open, onOpenChange, cart, onSaved }: SaveT
             if (!response.ok) throw new Error("Erro ao salvar itens");
             return response.json();
         },
-        onSuccess: () => {
+        onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ["comandas"] });
             toast.success("Itens salvos na comanda!");
+
+            const autoPrint = localStorage.getItem("pdv_auto_print_comanda") === "true";
+            if (autoPrint && cart.length > 0) {
+                const comandaTarget = comandas.find((c: any) => c.id === variables);
+                const mesaNome = comandaTarget ? (comandaTarget.table_number || comandaTarget.id) : variables;
+                printComandaBatch(variables, cart, mesaNome);
+            }
+
             onSaved();
             onOpenChange(false);
         }
@@ -73,10 +82,18 @@ export function SaveToComandaDialog({ open, onOpenChange, cart, onSaved }: SaveT
                 },
                 body: JSON.stringify({ items: cart })
             });
+
+            return comanda;
         },
-        onSuccess: () => {
+        onSuccess: (comanda) => {
             queryClient.invalidateQueries({ queryKey: ["comandas"] });
             toast.success("Nova comanda aberta e itens salvos!");
+
+            const autoPrint = localStorage.getItem("pdv_auto_print_comanda") === "true";
+            if (autoPrint && cart.length > 0) {
+                printComandaBatch(comanda.id, cart, comanda.table_number || comanda.id);
+            }
+
             onSaved();
             onOpenChange(false);
             setIsNewComandaOpen(false);

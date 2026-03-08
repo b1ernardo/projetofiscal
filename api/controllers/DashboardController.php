@@ -11,23 +11,23 @@ class DashboardController extends ApiController {
         $today = date('Y-m-d');
 
         // Vendas de hoje
-        $stmt = $this->conn->prepare("SELECT SUM(total_amount) as total FROM sales WHERE status = 'completed' AND DATE(created_at) = :today");
-        $stmt->execute([':today' => $today]);
+        $stmt = $this->conn->prepare("SELECT SUM(total_amount) as total FROM sales WHERE status = 'completed' AND DATE(created_at) = :today AND company_id = :company_id");
+        $stmt->execute([':today' => $today, ':company_id' => $this->company_id]);
         $todaySales = (float)($stmt->fetch()['total'] ?? 0);
 
         // Total de Despesas (Compras)
-        $stmt = $this->conn->prepare("SELECT SUM(total_amount) as total FROM purchases");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT SUM(total_amount) as total FROM purchases WHERE company_id = :company_id");
+        $stmt->execute([':company_id' => $this->company_id]);
         $totalDespesas = (float)($stmt->fetch()['total'] ?? 0);
 
         // Contagem de Produtos Ativos
-        $stmt = $this->conn->prepare("SELECT COUNT(id) as total FROM products WHERE active = 1");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT COUNT(id) as total FROM products WHERE active = 1 AND company_id = :company_id");
+        $stmt->execute([':company_id' => $this->company_id]);
         $productCount = (int)($stmt->fetch()['total'] ?? 0);
 
         // Comandas Abertas
-        $stmt = $this->conn->prepare("SELECT COUNT(id) as total FROM comandas WHERE status = 'open'");
-        $stmt->execute();
+        $stmt = $this->conn->prepare("SELECT COUNT(id) as total FROM comandas WHERE status = 'open' AND company_id = :company_id");
+        $stmt->execute([':company_id' => $this->company_id]);
         $openComandas = (int)($stmt->fetch()['total'] ?? 0);
 
         $this->jsonResponse([
@@ -46,9 +46,9 @@ class DashboardController extends ApiController {
         $byMonth = array_fill(0, 12, 0);
 
         $query = "SELECT total_amount, created_at FROM sales 
-                  WHERE status = 'completed' AND YEAR(created_at) = :year";
+                  WHERE status = 'completed' AND YEAR(created_at) = :year AND company_id = :company_id";
         $stmt = $this->conn->prepare($query);
-        $stmt->execute([':year' => $year]);
+        $stmt->execute([':year' => $year, ':company_id' => $this->company_id]);
         $sales = $stmt->fetchAll();
 
         foreach ($sales as $s) {

@@ -173,3 +173,143 @@ export const printReceipt = (data: ReceiptData) => {
     console.error("Popup blocked");
   }
 };
+
+export const printComandaItem = (comandaId: string, itemName: string, quantity: number, observation?: string) => {
+  const date = new Date().toLocaleString('pt-BR');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Pedido Comanda #${comandaId}</title>
+      <style>
+        body {
+          font-family: 'Courier New', Courier, monospace;
+          font-size: 14px;
+          margin: 0;
+          padding: 10px;
+          width: 100%;
+          max-width: 300px;
+          color: #000;
+        }
+        @media print {
+          @page { margin: 0; }
+          body { margin: 0; padding: 10px; width: 100%; }
+        }
+        .text-center { text-align: center; }
+        .bold { font-weight: bold; }
+        .divider { border-top: 1px dashed #000; margin: 10px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="text-center">
+        <strong style="font-size: 16px;">NOVO PEDIDO</strong>
+      </div>
+      <div class="divider"></div>
+      <div>
+        <strong>Comanda:</strong> ${comandaId}<br/>
+        <strong>Data/Hora:</strong> ${date}
+      </div>
+      <div class="divider"></div>
+      <div style="font-size: 16px;">
+        <strong>${quantity}x ${itemName}</strong>
+      </div>
+      ${observation ? `<div style="margin-top: 5px;"><strong>Obs:</strong> ${observation}</div>` : ''}
+      <div class="divider"></div>
+      <div class="text-center">
+        -- Cozinha/Bar --
+      </div>
+    </body>
+    </html>
+  `;
+
+  executeSilentPrint(html);
+};
+
+export const printComandaBatch = (comandaId: string, items: any[], mesa?: string) => {
+  const date = new Date().toLocaleString('pt-BR');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Pedido Comanda/Mesa ${mesa || comandaId}</title>
+      <style>
+        body {
+          font-family: 'Courier New', Courier, monospace;
+          font-size: 14px;
+          margin: 0;
+          padding: 10px;
+          width: 100%;
+          max-width: 300px;
+          color: #000;
+        }
+        @media print {
+          @page { margin: 0; }
+          body { margin: 0; padding: 10px; width: 100%; }
+        }
+        .text-center { text-align: center; }
+        .bold { font-weight: bold; }
+        .divider { border-top: 1px dashed #000; margin: 10px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="text-center">
+        <strong style="font-size: 16px;">NOVO PEDIDO</strong>
+      </div>
+      <div class="divider"></div>
+      <div>
+        <strong>Local:</strong> ${mesa || comandaId}<br/>
+        <strong>Data/Hora:</strong> ${date}
+      </div>
+      <div class="divider"></div>
+      <div style="font-size: 15px;">
+        ${items.map(item => `
+          <div style="margin-bottom: 5px;">
+            <strong>${item.quantity}x ${item.name}</strong>
+            ${item.observation ? `<br/><small>Obs: ${item.observation}</small>` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div class="divider"></div>
+      <div class="text-center">
+        -- Cozinha/Bar --
+      </div>
+    </body>
+    </html>
+  `;
+
+  executeSilentPrint(html);
+};
+
+const executeSilentPrint = (html: string) => {
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  if (iframe.contentWindow) {
+    iframe.contentWindow.document.open();
+    iframe.contentWindow.document.write(html);
+    iframe.contentWindow.document.close();
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 5000);
+    }, 250);
+  } else {
+    if (document.body.contains(iframe)) {
+      document.body.removeChild(iframe);
+    }
+  }
+};

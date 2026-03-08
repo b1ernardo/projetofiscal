@@ -4,6 +4,18 @@ require_once 'config.php';
 require_once 'db.php';
 require_once 'vendor/autoload.php';
 
+// Normaliza o cabeçalho de Autorização (Authorization) para aceitar vários formatos de servidor
+if (!isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    if (isset($_SERVER['Authorization'])) {
+        $_SERVER['HTTP_AUTHORIZATION'] = $_SERVER['Authorization'];
+    } elseif (function_exists('apache_request_headers')) {
+        $headers = apache_request_headers();
+        if (isset($headers['Authorization'])) {
+            $_SERVER['HTTP_AUTHORIZATION'] = $headers['Authorization'];
+        }
+    }
+}
+
 // Captura a rota (ex: login)
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $uri = str_replace(['/projetofiscal/api', '/sistemavendas/api', '/api'], '', $uri);
@@ -92,6 +104,16 @@ switch ($resource) {
         $controller = new SuppliersController($db);
         if ($method === 'GET') $controller->list();
         else if ($method === 'POST') $controller->create();
+        break;
+
+    case 'sellers':
+        require_once 'controllers/SellersController.php';
+        $db = (new Database())->getConnection();
+        $controller = new SellersController($db);
+        if ($method === 'GET') $controller->list();
+        else if ($method === 'POST') $controller->create();
+        else if ($method === 'PUT' && $id) $controller->update($id);
+        else if ($method === 'DELETE' && $id) $controller->delete($id);
         break;
 
     case 'sales':
@@ -190,6 +212,10 @@ switch ($resource) {
         else if ($id === 'stock' && $method === 'GET') $controller->getStockReport();
         else if ($id === 'top-products' && $method === 'GET') $controller->getTopProducts();
         else if ($id === 'dashboard' && $method === 'GET') $controller->getDashboardStats();
+        else if ($id === 'sales-product' && $method === 'GET') $controller->getSalesByProduct();
+        else if ($id === 'sales-customer' && $method === 'GET') $controller->getSalesByCustomer();
+        else if ($id === 'profitability' && $method === 'GET') $controller->getProfitability();
+        else if ($id === 'sellers-commission' && $method === 'GET') $controller->getSellersCommission();
         break;
 
     case 'accounts-payable':
@@ -256,6 +282,52 @@ switch ($resource) {
                 echo json_encode(["message" => "Method not allowed"]);
             }
         }
+        break;
+
+    case 'delivery-orders':
+        require_once 'controllers/DeliveryOrdersController.php';
+        $db = (new Database())->getConnection();
+        $controller = new DeliveryOrdersController($db);
+        if ($method === 'GET') $controller->list();
+        else if ($method === 'POST') $controller->create();
+        else if ($method === 'PUT' && isset($route_parts[2]) && $route_parts[2] === 'status') {
+             // e.g. PUT /api/delivery-orders/:id/status
+             $controller->updateStatus($id);
+        }
+        break;
+
+    case 'delivery-settings':
+        require_once 'controllers/DeliverySettingsController.php';
+        $db = (new Database())->getConnection();
+        $controller = new DeliverySettingsController($db);
+        if ($method === 'GET' && !$id) $controller->getSettings();
+        else if ($method === 'POST') $controller->saveSettings();
+        // Public settings logic can be moved here or to a separate public endpoint. Let's make it public route:
+        else if ($method === 'GET' && $id) $controller->getPublicSettings($id);
+        break;
+
+    case 'delivery-neighborhoods':
+        require_once 'controllers/DeliveryNeighborhoodsController.php';
+        $db = (new Database())->getConnection();
+        $controller = new DeliveryNeighborhoodsController($db);
+        if ($method === 'GET') $controller->list();
+        else if ($method === 'POST') $controller->create();
+        else if ($method === 'DELETE' && $id) $controller->delete($id);
+        break;
+
+    case 'superadmin':
+        require_once 'controllers/SuperAdminController.php';
+        $db = (new Database())->getConnection();
+        $controller = new SuperAdminController($db);
+        // Rotas específicas ANTES das genéricas
+        if ($id === 'modules' && $method === 'GET') $controller->listModules();
+        else if ($id === 'companies' && isset($route_parts[3]) && $route_parts[3] === 'users' && $method === 'GET') $controller->listCompanyUsers($route_parts[2]);
+        else if ($id === 'companies' && $method === 'GET') $controller->listCompanies();
+        else if ($id === 'companies' && $method === 'POST') $controller->createCompany();
+        else if ($id === 'companies' && $method === 'PUT') $controller->updateCompany($route_parts[2]);
+        else if ($id === 'accounts' && $method === 'POST') $controller->createAccount();
+        else if ($id === 'users' && isset($route_parts[2]) && $method === 'PUT') $controller->updateUserBySuper($route_parts[2]);
+        else if ($id === 'users' && isset($route_parts[2]) && $method === 'DELETE') $controller->deleteAccountBySuper($route_parts[2]);
         break;
 
     default:
