@@ -9,19 +9,22 @@ interface ReceiptOptionsDialogProps {
     onOpenChange: (open: boolean) => void;
     onEmitNFCe: () => void;
     onPrintReceipt: () => void;
+    onPrintA4?: () => void;
     onWhatsApp?: () => void;
 }
 
-export function ReceiptOptionsDialog({ open, onOpenChange, onEmitNFCe, onPrintReceipt, onWhatsApp }: ReceiptOptionsDialogProps) {
+export function ReceiptOptionsDialog({ open, onOpenChange, onEmitNFCe, onPrintReceipt, onPrintA4, onWhatsApp }: ReceiptOptionsDialogProps) {
     const [showF4, setShowF4] = useState(true);
     const [showF5, setShowF5] = useState(true);
     const [showF6, setShowF6] = useState(true);
+    const [showF7, setShowF7] = useState(true);
 
     useEffect(() => {
         if (open) {
             setShowF4(localStorage.getItem("pdv_show_f4") !== "false");
             setShowF5(localStorage.getItem("pdv_show_f5") !== "false");
             setShowF6(localStorage.getItem("pdv_show_f6") !== "false");
+            setShowF7(localStorage.getItem("pdv_show_f7") !== "false");
         }
     }, [open]);
 
@@ -35,6 +38,9 @@ export function ReceiptOptionsDialog({ open, onOpenChange, onEmitNFCe, onPrintRe
             } else if (e.key === "F5" && showF5) {
                 e.preventDefault();
                 onPrintReceipt();
+            } else if (e.key === "F7" && showF7 && onPrintA4) {
+                e.preventDefault();
+                onPrintA4();
             } else if (e.key === "F6" && showF6 && onWhatsApp) {
                 e.preventDefault();
                 onWhatsApp();
@@ -43,17 +49,17 @@ export function ReceiptOptionsDialog({ open, onOpenChange, onEmitNFCe, onPrintRe
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [open, onEmitNFCe, onPrintReceipt, onWhatsApp, showF4, showF5, showF6]);
+    }, [open, onEmitNFCe, onPrintReceipt, onPrintA4, onWhatsApp, showF4, showF5, showF6, showF7]);
 
-    const visibleCount = [showF4, showF5, showF6].filter(Boolean).length;
+    const visibleCount = [showF4, showF5, showF6, showF7].filter(Boolean).length;
     if (visibleCount === 0 && open) {
         // Fallback: auto close if everything disabled
         setTimeout(() => onOpenChange(false), 0);
         return null;
     }
 
-    const gridCols = visibleCount === 1 ? "grid-cols-1" : visibleCount === 2 ? "grid-cols-2" : "md:grid-cols-3";
-    const maxWidth = visibleCount === 1 ? "sm:max-w-[300px]" : visibleCount === 2 ? "sm:max-w-[450px]" : "sm:max-w-[650px]";
+    const gridCols = visibleCount <= 2 ? `grid-cols-${visibleCount}` : "grid-cols-2 md:grid-cols-4";
+    const maxWidth = visibleCount <= 2 ? `sm:max-w-[${visibleCount * 225}px]` : "sm:max-w-[800px]";
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,7 +86,19 @@ export function ReceiptOptionsDialog({ open, onOpenChange, onEmitNFCe, onPrintRe
                             className="h-40 flex flex-col items-center justify-center gap-4 bg-[#545454] text-white hover:bg-[#636363] hover:text-white border-0 rounded-md shadow-lg"
                         >
                             <Receipt className="h-14 w-14 drop-shadow-md text-white/90" />
-                            <span className="text-base font-medium text-center">F5 | Pedido</span>
+                            <span className="text-base font-medium text-center">F5 | Pedido<br />(Térmica)</span>
+                        </Button>
+                    )}
+
+                    {/* F7 */}
+                    {showF7 && onPrintA4 && (
+                        <Button
+                            onClick={onPrintA4}
+                            variant="outline"
+                            className="h-40 flex flex-col items-center justify-center gap-4 bg-[#545454] text-white hover:bg-[#636363] hover:text-white border-0 rounded-md shadow-lg"
+                        >
+                            <FileText className="h-14 w-14 drop-shadow-md text-white/90" />
+                            <span className="text-base font-medium text-center">F7 | Pedido<br />(A4)</span>
                         </Button>
                     )}
 

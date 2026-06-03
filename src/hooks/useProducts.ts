@@ -34,6 +34,7 @@ export interface ProductWithBoxConfigs {
   product_code: number | null;
   boxConfigs: BoxConfig[];
   venda_delivery: boolean;
+  sub_group: string | null;
 }
 
 const getHeaders = () => {
@@ -89,6 +90,7 @@ async function fetchProducts(): Promise<ProductWithBoxConfigs[]> {
       price: Number(bc.price)
     })),
     venda_delivery: Boolean(p.venda_delivery),
+    sub_group: p.sub_group ?? null,
   }));
 }
 
@@ -126,6 +128,7 @@ interface SaveProductData {
   productCode?: number;
   boxConfigs: BoxConfig[];
   venda_delivery: boolean;
+  subGroup?: string;
 }
 
 export function useSaveProduct() {
@@ -165,7 +168,8 @@ export function useSaveProduct() {
         ipi_aliquota: data.ipi_aliquota,
         product_code: data.productCode,
         boxConfigs: data.boxConfigs,
-        venda_delivery: data.venda_delivery ? 1 : 0
+        venda_delivery: data.venda_delivery ? 1 : 0,
+        sub_group: data.subGroup || null,
       };
 
       const response = await fetch(url, {

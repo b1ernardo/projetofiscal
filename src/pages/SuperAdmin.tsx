@@ -130,6 +130,36 @@ export default function SuperAdmin() {
         },
     });
 
+    const deleteCompanyMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const response = await fetch(`${API_URL}/superadmin/companies/${id}`, {
+                method: "DELETE",
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+                },
+            });
+
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || "Erro ao excluir empresa");
+                return result;
+            } else {
+                const text = await response.text();
+                console.error("Non-JSON response:", text);
+                if (!response.ok) throw new Error(`Erro do servidor (${response.status})`);
+                return { message: "Empresa excluída com sucesso (sem resposta JSON)" };
+            }
+        },
+        onSuccess: (data) => {
+            toast({ title: "Excluída", description: data.message });
+            queryClient.invalidateQueries({ queryKey: ["super-companies"] });
+        },
+        onError: (error: any) => {
+            toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+        }
+    });
+
     const deleteUserMutation = useMutation({
         mutationFn: async (userId: string) => {
             const response = await fetch(`${API_URL}/superadmin/users/${userId}`, {
@@ -363,7 +393,6 @@ export default function SuperAdmin() {
                                     <TableHead>Empresa</TableHead>
                                     <TableHead>CNPJ</TableHead>
                                     <TableHead>E-mail / Contato</TableHead>
-                                    <TableHead>Módulos</TableHead>
                                     <TableHead>Link Delivery</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Criada em</TableHead>
@@ -379,16 +408,7 @@ export default function SuperAdmin() {
                                             <div className="text-xs">{company.email}</div>
                                             <div className="text-xs text-muted-foreground">{company.phone}</div>
                                         </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-wrap gap-1 max-w-[150px]">
-                                                {company.modules.map(m => (
-                                                    <Badge key={m} variant="secondary" className="text-[10px] px-1 h-4">
-                                                        {availableModules.find(am => am.module_key === m)?.name || m}
-                                                    </Badge>
-                                                ))}
-                                                {company.modules.length === 0 && <span className="text-muted-foreground italic text-[10px]">Nenhum</span>}
-                                            </div>
-                                        </TableCell>
+
                                         <TableCell>
                                             {company.delivery_slug ? (
                                                 <a
@@ -451,6 +471,20 @@ export default function SuperAdmin() {
                                                     <UserPlus className="h-4 w-4 mr-1" />
                                                     Novo Acesso
                                                 </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                    onClick={() => {
+                                                        if (confirm(`AVISO CRÍTICO: Isso excluirá PERMANENTEMENTE a empresa "${company.name}" e TODOS os seus usuários, produtos, vendas e configurações. Deseja continuar?`)) {
+                                                            deleteCompanyMutation.mutate(company.id);
+                                                        }
+                                                    }}
+                                                    disabled={deleteCompanyMutation.isPending}
+                                                >
+                                                    <X className="h-4 w-4 mr-1" />
+                                                    Excluir
+                                                </Button>
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -482,6 +516,10 @@ export default function SuperAdmin() {
                             <div className="space-y-2">
                                 <Label htmlFor="admin_password">Senha Inicial</Label>
                                 <Input id="admin_password" name="password" type="password" required />
+                            </div>
+                            <div className="space-y-2 border-t pt-4">
+                                <Label htmlFor="admin_discount" className="text-blue-600 font-bold">Desconto Máximo (%)</Label>
+                                <Input id="admin_discount" name="max_discount" type="number" step="0.1" defaultValue={100} />
                             </div>
                         </div>
                         <DialogFooter>
@@ -646,6 +684,10 @@ export default function SuperAdmin() {
                             <div className="space-y-2 border-t pt-4">
                                 <Label htmlFor="edit_user_pass">Nova Senha (deixe vazio para manter)</Label>
                                 <Input id="edit_user_pass" name="password" type="password" />
+                            </div>
+                            <div className="space-y-2 border-t pt-4">
+                                <Label htmlFor="edit_user_discount" className="text-blue-600 font-bold">Desconto Máximo (%)</Label>
+                                <Input id="edit_user_discount" name="max_discount" type="number" step="0.1" defaultValue={editingUser?.max_discount || 100} />
                             </div>
                         </div>
                         <DialogFooter>

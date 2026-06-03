@@ -27,7 +27,7 @@ class DeliveryOrdersController extends ApiController {
             $stmtItems->execute([':order_id' => $order['id']]);
             $order['items'] = $stmtItems->fetchAll();
         }
-
+        if (ob_get_length()) ob_clean();
         $this->jsonResponse($orders);
     }
 
@@ -112,9 +112,11 @@ class DeliveryOrdersController extends ApiController {
             }
 
             $this->conn->commit();
+            if (ob_get_length()) ob_clean();
             $this->jsonResponse(["message" => "Pedido criado com sucesso", "id" => $order_id], 201);
         } catch (\Exception $e) {
             $this->conn->rollBack();
+            if (ob_get_length()) ob_clean();
             $this->jsonResponse(["message" => "Erro ao criar pedido: " . $e->getMessage()], 500);
         }
     }
@@ -156,10 +158,12 @@ class DeliveryOrdersController extends ApiController {
             ]);
 
             $this->conn->commit();
+            if (ob_get_length()) ob_clean();
             $this->jsonResponse(["message" => "Status do pedido atualizado", "sale_id" => $sale_id]);
 
         } catch (\Exception $e) {
             $this->conn->rollBack();
+            if (ob_get_length()) ob_clean();
             $this->jsonResponse(["message" => "Erro ao atualizar status: " . $e->getMessage()], 500);
         }
     }

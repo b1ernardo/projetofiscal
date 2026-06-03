@@ -31,11 +31,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 import { useFiscal } from "@/hooks/useFiscal";
 import { CancelFiscalDialog } from "@/components/caixa/CancelFiscalDialog";
 import { SaleDetailsDialog } from "@/components/vendas/SaleDetailsDialog";
 import { EditSaleDialog } from "@/components/vendas/EditSaleDialog";
-import { Edit3 } from "lucide-react";
+import { DeleteSaleDialog } from "@/components/caixa/DeleteSaleDialog";
+import { CancelSaleDialog } from "@/components/caixa/CancelSaleDialog";
+import { Edit3, QrCode, Trash2, Ban as BanIcon } from "lucide-react";
 
 const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -48,6 +51,8 @@ export default function Vendas() {
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [cancelInternalOpen, setCancelInternalOpen] = useState(false);
     const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
 
     const { data: sales, isLoading, refetch } = useSales(filters);
@@ -63,14 +68,20 @@ export default function Vendas() {
         if (model === '55') {
             navigate(`/nfe-avulsa?vendaId=${saleId}`);
         } else {
-            emitFiscal.mutate({ saleId, model }, {
-                onSuccess: () => refetch()
+            const promise = emitFiscal.mutateAsync({ saleId, model });
+            toast.promise(promise, {
+                loading: 'Comunicando com a SEFAZ... Aguarde...',
+                success: (data) => {
+                    refetch();
+                    return data.message || "Nota emitida com sucesso!";
+                },
+                error: (error) => error.message || "Erro ao emitir nota"
             });
         }
     };
 
     const handleViewDanfe = (fiscalId: string) => {
-        window.open(`${import.meta.env.VITE_API_URL}/fiscal/danfe/${fiscalId}`, '_blank');
+        window.open(`${import.meta.env.VITE_API_URL}/fiscal/danfe/${fiscalId}?token=${localStorage.getItem('auth_token')}&t=${Date.now()}`, '_blank');
     };
 
     const openDetailsDialog = (saleId: string) => {
@@ -214,67 +225,62 @@ export default function Vendas() {
                                         <TableCell className="font-semibold text-primary">{formatCurrency(sale.total_amount)}</TableCell>
                                         <TableCell>{getFiscalBadge(sale)}</TableCell>
                                         <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon">
-                                                        <MoreVertical className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="w-48">
-                                                    <DropdownMenuLabel>Ações da Venda</DropdownMenuLabel>
-                                                    <DropdownMenuItem className="gap-2" onClick={() => openDetailsDialog(sale.id)}>
-                                                        <Eye className="h-4 w-4" /> Ver Detalhes
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem className="gap-2" onClick={() => openEditDialog(sale.id)}>
-                                                        <Edit3 className="h-4 w-4" /> Editar Venda
-                                                    </DropdownMenuItem>
+                                            <div className="flex justify-end gap-1">
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openDetailsDialog(sale.id)} title="Ver Detalhes">
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(sale.id)} title="Editar Venda">
+                                                    <Edit3 className="h-3.5 w-3.5" />
+                                                </Button>
+                                                
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-7 w-7 text-primary"
+                                                    onClick={() => navigate(`/nfe-avulsa?vendaId=${sale.id}`)}
+                                                    title="Emitir NF-e"
+                                                >
+                                                    <FileText className="h-3.5 w-3.5" />
+                                                </Button>
 
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuLabel className="text-[10px] font-bold uppercase text-muted-foreground">Fiscal (SEFAZ)</DropdownMenuLabel>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-7 w-7 text-success"
+                                                    onClick={() => handleEmit(sale.id, '65')}
+                                                    disabled={emitFiscal.isPending}
+                                                    title="Emitir NFC-e"
+                                                >
+                                                    <QrCode className="h-3.5 w-3.5" />
+                                                </Button>
 
-                                                    {!sale.fiscal_status && (
-                                                        <>
-                                                            <DropdownMenuItem
-                                                                className="gap-2"
-                                                                onClick={() => handleEmit(sale.id, '65')}
-                                                                disabled={emitFiscal.isPending}
-                                                            >
-                                                                <FileJson className="h-4 w-4" /> Emitir NFC-e (65)
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                className="gap-2"
-                                                                onClick={() => handleEmit(sale.id, '55')}
-                                                                disabled={emitFiscal.isPending}
-                                                            >
-                                                                <FileText className="h-4 w-4" /> Emitir NF-e (55)
-                                                            </DropdownMenuItem>
-                                                        </>
-                                                    )}
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-7 w-7 text-orange-500" 
+                                                    onClick={() => {
+                                                        setSelectedSaleId(sale.id);
+                                                        setCancelInternalOpen(true);
+                                                    }} 
+                                                    title="Cancelar Venda (Interno)" 
+                                                    disabled={sale.status === 'cancelada'}
+                                                >
+                                                    <BanIcon className="h-3.5 w-3.5" />
+                                                </Button>
 
-                                                    {sale.fiscal_status === 'generated' && (
-                                                        <>
-                                                            <DropdownMenuItem
-                                                                className="gap-2"
-                                                                onClick={() => handleViewDanfe(sale.fiscal_id!)}
-                                                            >
-                                                                <Printer className="h-4 w-4" /> Ver DANFE (PDF)
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                className="gap-2"
-                                                                onClick={() => window.open(`${import.meta.env.VITE_API_URL || '/api'}/fiscal/xml/${sale.fiscal_id}`, '_blank')}
-                                                            >
-                                                                <Download className="h-4 w-4" /> Baixar XML
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                className="gap-2 text-destructive focus:text-destructive"
-                                                                onClick={() => openCancelDialog(sale.id)}
-                                                            >
-                                                                <Ban className="h-4 w-4" /> Cancelar Nota
-                                                            </DropdownMenuItem>
-                                                        </>
-                                                    )}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-7 w-7 text-destructive" 
+                                                    onClick={() => {
+                                                        setSelectedSaleId(sale.id);
+                                                        setDeleteOpen(true);
+                                                    }} 
+                                                    title="Excluir Venda"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -302,6 +308,20 @@ export default function Vendas() {
                 onOpenChange={setEditOpen}
                 saleId={selectedSaleId}
                 onSuccess={() => refetch()}
+            />
+
+            <DeleteSaleDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                saleId={selectedSaleId}
+                onDeleted={() => refetch()}
+            />
+
+            <CancelSaleDialog
+                open={cancelInternalOpen}
+                onOpenChange={setCancelInternalOpen}
+                saleId={selectedSaleId}
+                onCancelled={() => refetch()}
             />
         </div>
     );

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DollarSign, ArrowUpCircle, ArrowDownCircle, Lock, Unlock, Loader2, Pencil, Trash2, History } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { EditSaleDialog } from "@/components/caixa/EditSaleDialog";
+import { EditSaleDialog } from "@/components/vendas/EditSaleDialog";
 import { DeleteSaleDialog } from "@/components/caixa/DeleteSaleDialog";
 import { OpenCashRegisterDialog } from "@/components/caixa/OpenCashRegisterDialog";
 import { CashMovementDialog } from "@/components/caixa/CashMovementDialog";
@@ -17,7 +17,11 @@ import { DeleteMovementDialog } from "@/components/caixa/DeleteMovementDialog";
 import { CashHistoryDialog } from "@/components/caixa/CashHistoryDialog";
 import { useFiscal } from "@/hooks/useFiscal";
 import { CancelFiscalDialog } from "@/components/caixa/CancelFiscalDialog";
-import { FileText, QrCode } from "lucide-react";
+import { FileText, QrCode, Eye } from "lucide-react";
+import { toast } from "sonner";
+import { SaleDetailsDialog } from "@/components/vendas/SaleDetailsDialog";
+import { CancelSaleDialog } from "@/components/caixa/CancelSaleDialog";
+import { Ban as BanIcon } from "lucide-react";
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -26,7 +30,9 @@ export default function Caixa() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [editSale, setEditSale] = useState<any>(null);
+  const [viewSaleId, setViewSaleId] = useState<string | null>(null);
   const [deleteSaleId, setDeleteSaleId] = useState<string | null>(null);
+  const [cancelInternalSaleId, setCancelInternalSaleId] = useState<string | null>(null);
   const [cancelSaleId, setCancelSaleId] = useState<string | null>(null);
   const [openCashDialog, setOpenCashDialog] = useState(false);
   const [movementType, setMovementType] = useState<"sangria" | "suprimento" | null>(null);
@@ -242,6 +248,9 @@ export default function Caixa() {
                         <Badge variant={m.type === "Sangria" ? "destructive" : m.type === "Suprimento" ? "secondary" : m.type === "Abertura" ? "outline" : "default"}>
                           {m.type}
                         </Badge>
+                        {m.type === "Venda" && m.saleData?.status === 'cancelada' && (
+                          <Badge variant="destructive" className="animate-pulse">Cancelada</Badge>
+                        )}
                         {m.type === "Venda" && m.saleData?.fiscal_note_status === "generated" && (
                           <div className="flex items-center gap-1">
                             <Badge
@@ -288,6 +297,9 @@ export default function Caixa() {
                       <div className="flex justify-end gap-1">
                         {m.type === "Venda" && (
                           <>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setViewSaleId(m.id)} title="Ver Detalhes (e Imprimir)">
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditSale(m.saleData)} title="Editar Venda">
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
@@ -304,11 +316,21 @@ export default function Caixa() {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-success"
-                              onClick={() => emitFiscal.mutate({ saleId: m.id, model: '65' })}
+                              onClick={() => {
+                                const promise = emitFiscal.mutateAsync({ saleId: m.id, model: '65' });
+                                toast.promise(promise, {
+                                  loading: "Transmitindo NFC-e...",
+                                  success: (data) => data.message || "NFC-e autorizada!",
+                                  error: (err) => err.message || "Erro na emissão"
+                                });
+                              }}
                               disabled={emitFiscal.isPending}
                               title="Emitir NFC-e"
                             >
                               <QrCode className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-orange-500" onClick={() => setCancelInternalSaleId(m.id)} title="Cancelar Venda (Interno)" disabled={m.saleData?.status === 'cancelada'}>
+                              <BanIcon className="h-3.5 w-3.5" />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteSaleId(m.id)} title="Excluir Venda">
                               <Trash2 className="h-3.5 w-3.5" />
@@ -338,14 +360,25 @@ export default function Caixa() {
       <EditSaleDialog
         open={!!editSale}
         onOpenChange={(open) => !open && setEditSale(null)}
-        sale={editSale}
-        onSaved={refreshAll}
+        saleId={editSale?.id}
+        onSuccess={refreshAll}
+      />
+      <SaleDetailsDialog
+        open={!!viewSaleId}
+        onOpenChange={(open) => !open && setViewSaleId(null)}
+        saleId={viewSaleId}
       />
       <DeleteSaleDialog
         open={!!deleteSaleId}
         onOpenChange={(open) => !open && setDeleteSaleId(null)}
         saleId={deleteSaleId}
         onDeleted={refreshAll}
+      />
+      <CancelSaleDialog
+        open={!!cancelInternalSaleId}
+        onOpenChange={(open) => !open && setCancelInternalSaleId(null)}
+        saleId={cancelInternalSaleId}
+        onCancelled={refreshAll}
       />
 
       <EditMovementDialog

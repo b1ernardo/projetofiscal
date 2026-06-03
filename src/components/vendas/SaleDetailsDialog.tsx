@@ -4,6 +4,9 @@ import { useSaleDetail } from "@/hooks/useSales";
 import { Loader2, Package, CreditCard, Calendar, User } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Button } from "@/components/ui/button";
+import { Printer } from "lucide-react";
+import { printReceipt, printReceiptA4 } from "@/utils/printReceipt";
 
 const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -24,9 +27,60 @@ export function SaleDetailsDialog({ open, onOpenChange, saleId }: Props) {
                     <DialogTitle className="flex justify-between items-center pr-6">
                         <span>Detalhes da Venda #{sale?.sale_number}</span>
                         {sale && (
-                            <span className="text-sm font-normal text-muted-foreground uppercase">
-                                {format(new Date(sale.created_at), "dd MMMM yyyy HH:mm", { locale: ptBR })}
-                            </span>
+                            <div className="flex items-center gap-4">
+                                <span className="text-sm font-normal text-muted-foreground uppercase hidden sm:inline">
+                                    {format(new Date(sale.created_at), "dd MMMM yyyy HH:mm", { locale: ptBR })}
+                                </span>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" size="sm" onClick={() => {
+                                        const receiptData = {
+                                            saleNumber: sale.sale_number,
+                                            cart: sale.items.map((i: any) => ({
+                                                name: i.product_name || 'Produto',
+                                                quantity: Number(i.quantity) || 1,
+                                                price: Number(i.unit_price) || 0,
+                                                type_nome: i.type_nome
+                                            })),
+                                            total: sale.total_amount,
+                                            discount: sale.discount || 0,
+                                            payments: sale.payments.map((p: any) => ({
+                                                methodName: p.method_name,
+                                                amount: Number(p.amount) || 0
+                                            })),
+                                            date: new Date(sale.created_at),
+                                            fiscal: sale.fiscal,
+                                            customerName: sale.customer_name || sale.customer?.name,
+                                            customerDocument: (sale as any).customer_document || sale.customer?.cpf_cnpj
+                                        };
+                                        printReceipt(receiptData);
+                                    }}>
+                                        <Printer className="mr-2 h-4 w-4" /> Bobina
+                                    </Button>
+                                    <Button variant="outline" size="sm" onClick={() => {
+                                        const receiptData = {
+                                            saleNumber: sale.sale_number,
+                                            cart: sale.items.map((i: any) => ({
+                                                name: i.product_name || 'Produto',
+                                                quantity: Number(i.quantity) || 1,
+                                                price: Number(i.unit_price) || 0,
+                                                type_nome: i.type_nome
+                                            })),
+                                            total: sale.total_amount,
+                                            discount: sale.discount || 0,
+                                            payments: sale.payments.map((p: any) => ({
+                                                methodName: p.method_name,
+                                                amount: Number(p.amount) || 0
+                                            })),
+                                            date: new Date(sale.created_at),
+                                            customerName: sale.customer_name || sale.customer?.name,
+                                            customerDocument: (sale as any).customer_document || sale.customer?.cpf_cnpj
+                                        };
+                                        printReceiptA4(receiptData);
+                                    }}>
+                                        <Printer className="mr-2 h-4 w-4" /> A4
+                                    </Button>
+                                </div>
+                            </div>
                         )}
                     </DialogTitle>
                 </DialogHeader>

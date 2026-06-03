@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { printReceipt } from "@/utils/printReceipt";
+import { Printer } from "lucide-react";
+import { toast } from "sonner";
 
 const API = import.meta.env.VITE_API_URL;
 const token = () => localStorage.getItem("auth_token");
@@ -123,11 +125,49 @@ export default function NotasFiscais({ tipo }: { tipo: "NFE" | "NFCE" }) {
     });
 
     const handleDanfe = (noteId: string) => {
-        window.open(`${API}/fiscal/danfe/${noteId}?token=${token()}`, "_blank");
+        window.open(`${API}/fiscal/danfe/${noteId}?token=${token()}&t=${Date.now()}`, "_blank");
     };
 
     const handleXml = (noteId: string) => {
-        window.open(`${API}/fiscal/xml/${noteId}?token=${token()}`, "_blank");
+        window.open(`${API}/fiscal/xml/${noteId}?token=${token()}&t=${Date.now()}`, "_blank");
+    };
+
+    const handleThermal = async (saleId: string) => {
+        // Abre a janela ANTES do await para manter o contexto do gesto do usuário
+        // (browsers bloqueiam window.open chamado após um await)
+        const printWindow = window.open('', '_blank', 'width=420,height=700');
+        if (!printWindow) {
+            toast.error('Popup bloqueado. Permita popups para este site nas configurações do navegador.');
+            return;
+        }
+        try {
+            const res = await fetch(`${API}/sales/${saleId}`, {
+                headers: { Authorization: `Bearer ${token()}` },
+            });
+            if (!res.ok) throw new Error('Erro ao buscar dados da venda');
+            const saleToPrint = await res.json();
+            await printReceipt({
+                saleNumber: saleToPrint.sale_number,
+                cart: saleToPrint.items.map((i: any) => ({
+                    name: i.product_name,
+                    quantity: i.quantity,
+                    price: i.unit_price,
+                    code: i.product_code,
+                    unit: i.product_unit
+                })),
+                total: saleToPrint.total_amount,
+                discount: saleToPrint.discount || 0,
+                payments: saleToPrint.payments.map((p: any) => ({
+                    methodName: p.method_name,
+                    amount: p.amount
+                })),
+                date: new Date(saleToPrint.created_at),
+                fiscal: saleToPrint.fiscal
+            }, printWindow);
+        } catch (e: any) {
+            printWindow.close();
+            toast.error(e.message || 'Erro ao imprimir cupom');
+        }
     };
 
     const authorizedCount = notes.filter(n => ["generated", "autorizada"].includes(n.status?.toLowerCase())).length;
@@ -302,9 +342,16 @@ export default function NotasFiscais({ tipo }: { tipo: "NFE" | "NFCE" }) {
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex gap-1 justify-end">
-                                                            <Button variant="ghost" size="icon" title="DANFE (PDF)" onClick={() => handleDanfe(note.id)}>
-                                                                <Eye className="h-4 w-4" />
-                                                            </Button>
+                                                            {tipo === "NFCE" && (
+                                                                <Button variant="ghost" size="icon" title="Imprimir Cupom (Térmica)" onClick={() => handleThermal(note.sale_id)}>
+                                                                    <Printer className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                            {tipo !== "NFCE" && (
+                                                                <Button variant="ghost" size="icon" title="DANFE (PDF)" onClick={() => handleDanfe(note.id)}>
+                                                                    <Eye className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
                                                             <Button variant="ghost" size="icon" title="Download XML" onClick={() => handleXml(note.id)}>
                                                                 <Download className="h-4 w-4" />
                                                             </Button>

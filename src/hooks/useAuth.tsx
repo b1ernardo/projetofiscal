@@ -8,6 +8,7 @@ interface User {
   full_name?: string;
   permissions?: string[];
   company_modules?: string[];
+  max_discount?: number;
 }
 
 interface AuthContextType {
@@ -43,7 +44,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const apiBase = (import.meta.env.VITE_API_URL || '/projetofiscal/api').replace(/\/$/, '');
+        // Detecta a base da API de forma ultra-segura
+        let apiBase = import.meta.env.VITE_API_URL || "";
+        if (!apiBase) {
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          if (isLocal) {
+            apiBase = "/api";
+          } else {
+            // Em produção, tenta encontrar a base removendo a página atual se for conhecida
+            const path = window.location.pathname.replace(/\/(login|vendas|pdv|produtos|estoque|caixa|clientes|configuracoes|orcamentos|ordens-servico|nfe|nfce|nova-venda|nova-compra|relatorios|comandas|fornecedores|vendedores|superadmin|delivery-painel).*$/, "");
+            apiBase = `${window.location.origin}${path.replace(/\/$/, '')}/api`;
+          }
+        }
+
         const response = await fetch(`${apiBase}/auth/me`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -52,12 +65,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (response.ok) {
           const data = await response.json();
-          setUser(data.user);
-          setSession({ access_token: token });
-          if (data.user.roles) setRoles(Array.isArray(data.user.roles) ? data.user.roles : [data.user.roles]);
-          if (data.user.permissions) setPermissions(Array.isArray(data.user.permissions) ? data.user.permissions : []);
-          if (data.user.company_modules) setCompanyModules(Array.isArray(data.user.company_modules) ? data.user.company_modules : []);
-          if (data.user.profile) setProfile(data.user.profile);
+          if (data && data.user) {
+            setUser(data.user);
+            setSession({ access_token: token });
+            if (data.user.roles) setRoles(Array.isArray(data.user.roles) ? data.user.roles : [data.user.roles]);
+            if (data.user.permissions) setPermissions(Array.isArray(data.user.permissions) ? data.user.permissions : []);
+            if (data.user.company_modules) setCompanyModules(Array.isArray(data.user.company_modules) ? data.user.company_modules : []);
+            if (data.user.profile) setProfile(data.user.profile);
+          } else {
+            console.warn("User data missing in /auth/me response", data);
+            localStorage.removeItem('auth_token');
+            setLoading(false);
+          }
         } else {
           localStorage.removeItem('auth_token');
         }
@@ -80,16 +99,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       'comandas': 'comandas',
       'delivery': 'delivery',
       'stock': 'stock',
+      'produtos': 'produtos',
       'finances': 'finances',
       'fiscal': 'fiscal',
+      'clientes': 'clientes',
+      'fornecedores': 'stock',
+      'configuracoes': 'configuracoes',
+      'dados_empresa': 'dados_empresa',
+      'dashboard': 'dashboard',
+      'relatorios': 'vendas', // Mapeia relatórios para o módulo de vendas/gestão
     };
 
     const targetModule = moduleMappings[module];
-    if (targetModule && !companyModules.includes(targetModule)) {
-      return false;
+    if (targetModule) {
+      // "stock" e "produtos" são módulos equivalentes — qualquer um habilita Produtos/Estoque/Compras
+      const aliases: Record<string, string[]> = {
+        stock: ["stock", "produtos"],
+        produtos: ["stock", "produtos"],
+      };
+      const accepted = aliases[targetModule] ?? [targetModule];
+      if (!accepted.some((k) => companyModules.includes(k))) {
+        return false;
+      }
     }
 
     if (roles.includes("admin")) return true;
+
+    // Permissões padrão por Role caso não existam no banco
+    if (roles.includes("operador_caixa")) {
+      const cashierDefaults = ["pdv", "caixa", "comandas", "clientes", "vendas", "contas_pagar", "contas_receber", "finances"];
+      if (cashierDefaults.includes(module)) return true;
+    }
+
+    if (roles.includes("estoquista")) {
+      const stockDefaults = ["produtos", "estoque", "fornecedores"];
+      if (stockDefaults.includes(module)) return true;
+    }
+
     return permissions.includes(module);
   };
 

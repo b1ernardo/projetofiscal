@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ export default function Login() {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("remembered_email");
@@ -30,6 +32,7 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    console.log("Tentando login...");
 
     try {
       if (rememberMe) {
@@ -40,7 +43,21 @@ export default function Login() {
         localStorage.removeItem("remembered_password");
       }
 
-      const apiBase = (import.meta.env.VITE_API_URL || '/projetofiscal/api').replace(/\/$/, '');
+      // Detecta a base da API de forma ultra-segura
+      let apiBase = import.meta.env.VITE_API_URL || "";
+      if (!apiBase) {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isLocal) {
+          apiBase = "/api"; // Usa o proxy do Vite no dev
+        } else {
+          // Em produção (Hostinger), pega o caminho da pasta atual
+          const path = window.location.pathname.replace(/\/login\/?$/, "");
+          apiBase = `${window.location.origin}${path.replace(/\/$/, '')}/api`;
+        }
+      }
+
+      console.log("Chamando API em:", `${apiBase}/login`);
+
       const response = await fetch(`${apiBase}/login`, {
         method: 'POST',
         headers: {
@@ -49,19 +66,40 @@ export default function Login() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      console.log("Resposta bruta da API:", text);
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Erro ao fazer login');
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error("O servidor retornou uma resposta inválida (não é JSON).");
       }
 
-      // Store token
-      localStorage.setItem('auth_token', data.token);
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Erro ao fazer login');
+      }
 
-      window.location.href = import.meta.env.BASE_URL;
+      localStorage.setItem('auth_token', data.token);
+      console.log("Sucesso! Redirecionando...");
+      toast.success("Login realizado com sucesso!");
+
+      setTimeout(() => {
+        // Redireciona de forma absoluta para a raiz do app
+        const currentPath = window.location.pathname;
+        const rootPath = currentPath.replace(/\/login\/?$/, "") || "/";
+        const finalUrl = window.location.origin + rootPath;
+        
+        console.log("Caminho atual:", currentPath);
+        console.log("Caminho raiz detectado:", rootPath);
+        console.log("URL final de redirecionamento:", finalUrl);
+        
+        window.location.href = finalUrl;
+      }, 500);
 
     } catch (error: any) {
-      toast.error(error.message);
+      console.error("Erro no login:", error);
+      toast.error(error.message || "Erro de conexão com o servidor");
     } finally {
       setLoading(false);
     }

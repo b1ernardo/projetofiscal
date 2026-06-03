@@ -3,10 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Package, Loader2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
+import { useCategories } from "@/hooks/useCategories";
+import { useSubCategories } from "@/hooks/useSubCategories";
 
 const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -15,14 +18,22 @@ export default function RelatorioVendasProduto() {
     const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
     const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
     const [searchTerm, setSearchTerm] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("__all__");
+    const [subCategoryFilter, setSubCategoryFilter] = useState("__all__");
+
+    const { data: categories = [] } = useCategories();
+    const { data: allSubCategories = [] } = useSubCategories();
+
+    const selectedCategory = categories.find((c) => c.name === categoryFilter);
+    const filteredSubCats = selectedCategory
+        ? allSubCategories.filter((s) => s.category_id === selectedCategory.id)
+        : [];
 
     const { data: salesData = [], isLoading } = useQuery({
         queryKey: ["report-sales-product", startDate, endDate],
         queryFn: async () => {
             const response = await fetch(`${import.meta.env.VITE_API_URL}/reports/sales-product?start=${startDate}&end=${endDate}`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                }
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
             });
             if (!response.ok) throw new Error('Falha ao carregar relatório');
             const data = await response.json();
@@ -30,23 +41,32 @@ export default function RelatorioVendasProduto() {
                 code: p.code,
                 name: p.name,
                 category: p.category ?? "—",
+                subGroup: p.sub_group ?? "",
                 qty: parseFloat(p.total_qty) || 0,
                 revenue: parseFloat(p.total_amount) || 0,
-                orders: parseInt(p.total_orders) || 0
+                orders: parseInt(p.total_orders) || 0,
             }));
         },
     });
 
     const filteredData = salesData.filter((item: any) => {
-        if (!searchTerm) return true;
-        const searchRaw = searchTerm.toLowerCase().trim();
-        const safeName = String(item.name || "").toLowerCase();
-        const safeCode = String(item.code || "").toLowerCase();
-        return safeName.includes(searchRaw) || safeCode.includes(searchRaw);
+        if (categoryFilter !== "__all__" && item.category !== categoryFilter) return false;
+        if (subCategoryFilter !== "__all__" && item.subGroup !== subCategoryFilter) return false;
+        if (searchTerm) {
+            const q = searchTerm.toLowerCase().trim();
+            if (!String(item.name || "").toLowerCase().includes(q) &&
+                !String(item.code || "").toLowerCase().includes(q)) return false;
+        }
+        return true;
     });
 
     const totalRevenue = filteredData.reduce((acc: number, item: any) => acc + item.revenue, 0);
     const totalQty = filteredData.reduce((acc: number, item: any) => acc + item.qty, 0);
+
+    const handleCategoryChange = (val: string) => {
+        setCategoryFilter(val);
+        setSubCategoryFilter("__all__");
+    };
 
     return (
         <div className="space-y-6">
@@ -65,7 +85,37 @@ export default function RelatorioVendasProduto() {
                         <Label className="text-xs">Data Fim</Label>
                         <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
                     </div>
-                    <div className="space-y-1 flex-1 min-w-[200px]">
+                    <div className="space-y-1 w-44">
+                        <Label className="text-xs">Categoria</Label>
+                        <Select value={categoryFilter} onValueChange={handleCategoryChange}>
+                            <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">Todas as categorias</SelectItem>
+                                {categories.map((c) => (
+                                    <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1 w-44">
+                        <Label className="text-xs">Sub-categoria</Label>
+                        <Select
+                            value={subCategoryFilter}
+                            onValueChange={setSubCategoryFilter}
+                            disabled={filteredSubCats.length === 0}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder={filteredSubCats.length === 0 ? "—" : "Todas"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">Todas</SelectItem>
+                                {filteredSubCats.map((s) => (
+                                    <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1 flex-1 min-w-[180px]">
                         <Label className="text-xs">Buscar Produto</Label>
                         <Input
                             type="text"
@@ -112,6 +162,7 @@ export default function RelatorioVendasProduto() {
                                     <TableHead>Código</TableHead>
                                     <TableHead>Produto</TableHead>
                                     <TableHead>Categoria</TableHead>
+                                    <TableHead>Sub-categoria</TableHead>
                                     <TableHead className="text-right">Qtd Vendida</TableHead>
                                     <TableHead className="text-right">Nº Vendas</TableHead>
                                     <TableHead className="text-right">Receita Total</TableHead>
@@ -123,6 +174,11 @@ export default function RelatorioVendasProduto() {
                                         <TableCell className="text-xs text-muted-foreground">{p.code || "—"}</TableCell>
                                         <TableCell className="font-medium">{p.name}</TableCell>
                                         <TableCell><Badge variant="outline">{p.category}</Badge></TableCell>
+                                        <TableCell>
+                                            {p.subGroup
+                                                ? <Badge variant="secondary">{p.subGroup}</Badge>
+                                                : <span className="text-xs text-muted-foreground">—</span>}
+                                        </TableCell>
                                         <TableCell className="text-right font-medium">{p.qty}</TableCell>
                                         <TableCell className="text-right">{p.orders}</TableCell>
                                         <TableCell className="text-right">{formatCurrency(p.revenue)}</TableCell>

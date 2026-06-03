@@ -25,8 +25,8 @@ class SalesController extends ApiController {
             }
 
             // 1. Inserir a venda
-            $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, customer_id, seller_id, total_amount, payment_method, created_by, status, discount) 
-                                          VALUES (:id, :company_id, :customer_id, :seller_id, :total, :method, :uid, 'completed', :discount)");
+            $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, customer_id, seller_id, total_amount, payment_method, created_by, status, discount, created_at) 
+                                          VALUES (:id, :company_id, :customer_id, :seller_id, :total, :method, :uid, 'completed', :discount, :created_at)");
             $stmt->execute([
                 ":id" => $saleId,
                 ":company_id" => $this->company_id,
@@ -35,7 +35,8 @@ class SalesController extends ApiController {
                 ":total" => $data->total,
                 ":method" => $paymentLabel,
                 ":uid" => $auth['id'],
-                ":discount" => $data->discount ?? 0
+                ":discount" => $data->discount ?? 0,
+                ":created_at" => date('Y-m-d H:i:s')
             ]);
 
             // Pegar o número sequencial da venda
@@ -65,8 +66,8 @@ class SalesController extends ApiController {
                 // Detect multiplier from box configs
                 $multiplier = 1;
                 $matched_label = null;
-                $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid AND company_id = :company_id");
-                $bc_stmt->execute([':pid' => $productId, ':company_id' => $this->company_id]);
+                $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid");
+                $bc_stmt->execute([':pid' => $productId]);
                 $box_configs = $bc_stmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 foreach ($box_configs as $bc) {
@@ -102,14 +103,15 @@ class SalesController extends ApiController {
                     $obs .= " (Formato x{$multiplier})";
                 }
                 
-                $stmt = $this->conn->prepare("INSERT INTO stock_movements (id, company_id, product_id, quantity, type, observation, created_by) VALUES (:id, :company_id, :pid, :qty, 'saida', :obs, :uid)");
+                $stmt = $this->conn->prepare("INSERT INTO stock_movements (id, company_id, product_id, quantity, type, observation, created_by, created_at) VALUES (:id, :company_id, :pid, :qty, 'saida', :obs, :uid, :created_at)");
                 $stmt->execute([
                     ":id" => generateUUID(),
                     ":company_id" => $this->company_id,
                     ":pid" => $productId,
                     ":qty" => $totalUnits,
                     ":obs" => $obs,
-                    ":uid" => $auth['id']
+                    ":uid" => $auth['id'],
+                    ":created_at" => date('Y-m-d H:i:s')
                 ]);
             }
 
@@ -122,27 +124,46 @@ class SalesController extends ApiController {
                 foreach ($data->payments as $p) {
                     // Se for "Conta", não entra no caixa (vai para contas a receber)
                     if (strtolower($p->methodName) === 'conta') {
-                        $stmt = $this->conn->prepare("INSERT INTO accounts_receivable (id, company_id, description, customer_id, amount, due_date, status, category) 
-                                                      VALUES (:id, :company_id, :desc, :customer_id, :amount, :due, 'pending', 'Vendas')");
-                        $stmt->execute([
-                            ":id" => generateUUID(),
-                            ":company_id" => $this->company_id,
-                            ":desc" => "Venda #" . $saleNumber . " (Prazo)",
-                            ":customer_id" => $data->customerId ?? null,
-                            ":amount" => $p->amount,
-                            ":due" => date('Y-m-d', strtotime('+30 days')) // Default 30 days
-                        ]);
+                        if (!empty($p->installments) && is_array($p->installments)) {
+                            $totalInst = count($p->installments);
+                            foreach ($p->installments as $idx => $inst) {
+                                $stmt = $this->conn->prepare("INSERT INTO accounts_receivable (id, company_id, sale_id, description, customer_id, amount, due_date, status, category) 
+                                                              VALUES (:id, :company_id, :sale_id, :desc, :customer_id, :amount, :due, 'pending', 'Vendas')");
+                                $stmt->execute([
+                                    ":id" => generateUUID(),
+                                    ":company_id" => $this->company_id,
+                                    ":sale_id" => $saleId,
+                                    ":desc" => "Venda #" . $saleNumber . " (" . ($idx + 1) . "/" . $totalInst . ")",
+                                    ":customer_id" => $data->customerId ?? null,
+                                    ":amount" => $inst->amount,
+                                    ":due" => $inst->dueDate
+                                ]);
+                            }
+                        } else {
+                            $stmt = $this->conn->prepare("INSERT INTO accounts_receivable (id, company_id, sale_id, description, customer_id, amount, due_date, status, category) 
+                                                          VALUES (:id, :company_id, :sale_id, :desc, :customer_id, :amount, :due, 'pending', 'Vendas')");
+                            $stmt->execute([
+                                ":id" => generateUUID(),
+                                ":company_id" => $this->company_id,
+                                ":sale_id" => $saleId,
+                                ":desc" => "Venda #" . $saleNumber . " (Prazo)",
+                                ":customer_id" => $data->customerId ?? null,
+                                ":amount" => $p->amount,
+                                ":due" => date('Y-m-d', strtotime('+30 days')) // Default 30 days
+                            ]);
+                        }
                         continue;
                     }
 
-                    $stmt = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by) VALUES (:id, :company_id, :reg_id, :amount, 'venda', :obs, :uid)");
+                    $stmt = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by, created_at) VALUES (:id, :company_id, :reg_id, :amount, 'venda', :obs, :uid, :created_at)");
                     $stmt->execute([
                         ":id" => generateUUID(),
                         ":company_id" => $this->company_id,
                         ":reg_id" => $register['id'],
                         ":amount" => $p->amount,
                         ":obs" => "Venda #{$saleNumber} - " . $p->methodName,
-                        ":uid" => $auth['id']
+                        ":uid" => $auth['id'],
+                        ":created_at" => date('Y-m-d H:i:s')
                     ]);
                 }
             }
@@ -202,6 +223,37 @@ class SalesController extends ApiController {
             $sale['customer'] = null;
         }
 
+        // Carregar dados fiscais se existirem
+        $stmt = $this->conn->prepare("
+            SELECT id, tipo, numero, serie, chave, protocolo, status, created_at as fiscal_date, xml_path 
+            FROM fiscal_notes 
+            WHERE sale_id = :id AND company_id = :company_id 
+            ORDER BY created_at DESC LIMIT 1
+        ");
+        $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
+        $fiscal = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($fiscal) {
+            $fiscal['qrCode'] = null;
+            if (!empty($fiscal['xml_path'])) {
+                try {
+                    $xml = @simplexml_load_string($fiscal['xml_path']);
+                    if ($xml) {
+                        $xml->registerXPathNamespace('ns', 'http://www.portalfiscal.inf.br/nfe');
+                        $qrCodeArr = $xml->xpath('//ns:infNFeSupl/ns:qrCode');
+                        $fiscal['qrCode'] = $qrCodeArr ? (string)$qrCodeArr[0] : null;
+                        
+                        $urlArr = $xml->xpath('//ns:infNFeSupl/ns:urlChave');
+                        $fiscal['urlConsulta'] = $urlArr ? (string)$urlArr[0] : null;
+                    }
+                } catch (\Throwable $e) {}
+            }
+            unset($fiscal['xml_path']); // Não enviar o XML inteiro
+            $sale['fiscal'] = $fiscal;
+        } else {
+            $sale['fiscal'] = null;
+        }
+
         $this->jsonResponse($sale);
     }
 
@@ -214,17 +266,19 @@ class SalesController extends ApiController {
             $this->conn->beginTransaction();
 
             // 1. Restore Stock (reverse old items)
-            $stmt = $this->conn->prepare("SELECT si.product_id, si.quantity FROM sale_items si WHERE si.sale_id = :id AND si.company_id = :company_id");
+            $stmt = $this->conn->prepare("SELECT si.product_id, si.quantity, si.multiplier FROM sale_items si WHERE si.sale_id = :id AND si.company_id = :company_id");
             $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
             $oldItems = $stmt->fetchAll();
             foreach ($oldItems as $oi) {
+                $qtyToRestore = $oi['quantity'] * ($oi['multiplier'] ?? 1);
                 $this->conn->prepare("UPDATE products SET stock_current = stock_current + :qty WHERE id = :pid AND company_id = :company_id")
-                           ->execute([":qty" => $oi['quantity'], ":pid" => $oi['product_id'], ":company_id" => $this->company_id]);
+                           ->execute([":qty" => $qtyToRestore, ":pid" => $oi['product_id'], ":company_id" => $this->company_id]);
             }
 
-            // 2. Clear old items and payments
+            // 2. Clear old items, payments and receivables
             $this->conn->prepare("DELETE FROM sale_items WHERE sale_id = :id AND company_id = :company_id")->execute([":id" => $id, ":company_id" => $this->company_id]);
             $this->conn->prepare("DELETE FROM sale_payments WHERE sale_id = :id AND company_id = :company_id")->execute([":id" => $id, ":company_id" => $this->company_id]);
+            $this->conn->prepare("DELETE FROM accounts_receivable WHERE sale_id = :id AND company_id = :company_id")->execute([":id" => $id, ":company_id" => $this->company_id]);
 
             // 3. Insert fresh items and adjust stock
             foreach ($data->items as $item) {
@@ -232,8 +286,8 @@ class SalesController extends ApiController {
                 $productId = substr($rawProductId, 0, 36);
                 
                 $multiplier = 1;
-                $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid AND company_id = :company_id");
-                $bc_stmt->execute([':pid' => $productId, ':company_id' => $this->company_id]);
+                $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid");
+                $bc_stmt->execute([':pid' => $productId]);
                 $box_configs = $bc_stmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 foreach ($box_configs as $bc) {
@@ -259,7 +313,7 @@ class SalesController extends ApiController {
                            ->execute([":qty" => $totalUnits, ":pid" => $productId, ":company_id" => $this->company_id]);
             }
 
-            // 4. Insert fresh payments
+            // 4. Insert fresh payments and receivables
             $labels = [];
             foreach ($data->payments as $p) {
                 $labels[] = $p->methodName;
@@ -271,17 +325,55 @@ class SalesController extends ApiController {
                                ":method" => $p->methodName,
                                ":amount" => $p->amount
                            ]);
+
+                if (strtolower($p->methodName) === 'conta') {
+                    // Re-fetch sale number for description
+                    $s_stmt = $this->conn->prepare("SELECT sale_number FROM sales WHERE id = :id");
+                    $s_stmt->execute([':id' => $id]);
+                    $saleInfo = $s_stmt->fetch();
+
+                    // Use customerId from data if provided, otherwise fallback to existing
+                    $finalCustomerId = property_exists($data, 'customerId') ? $data->customerId : null;
+                    if (!$finalCustomerId) {
+                        $s_stmt2 = $this->conn->prepare("SELECT customer_id FROM sales WHERE id = :id");
+                        $s_stmt2->execute([':id' => $id]);
+                        $finalCustomerId = $s_stmt2->fetchColumn();
+                    }
+
+                    $this->conn->prepare("INSERT INTO accounts_receivable (id, company_id, sale_id, description, customer_id, amount, due_date, status, category) 
+                                          VALUES (:id, :company_id, :sale_id, :desc, :customer_id, :amount, :due, 'pending', 'Vendas')")
+                               ->execute([
+                                   ":id" => generateUUID(),
+                                   ":company_id" => $this->company_id,
+                                   ":sale_id" => $id,
+                                   ":desc" => "Venda #" . ($saleInfo['sale_number'] ?? 'Alt') . " (Reajustada)",
+                                   ":customer_id" => $finalCustomerId,
+                                   ":amount" => $p->amount,
+                                   ":due" => date('Y-m-d', strtotime('+30 days'))
+                               ]);
+                }
             }
 
             // 5. Update Sale table
             $paymentLabel = implode(" / ", $labels);
-            $this->conn->prepare("UPDATE sales SET total_amount = :total, payment_method = :method WHERE id = :id AND company_id = :company_id")
-                       ->execute([
-                           ":total" => $data->total,
-                           ":method" => $paymentLabel,
-                           ":id" => $id,
-                           ":company_id" => $this->company_id
-                       ]);
+            $updateSql = "UPDATE sales SET total_amount = :total, discount = :discount, payment_method = :method, status = :status";
+            $updateParams = [
+                ":total" => $data->total,
+                ":discount" => $data->discount ?? 0,
+                ":method" => $paymentLabel,
+                ":status" => $data->status ?? 'completed',
+                ":id" => $id,
+                ":company_id" => $this->company_id
+            ];
+
+            if (property_exists($data, 'customerId')) {
+                $updateSql .= ", customer_id = :customer_id";
+                $updateParams[":customer_id"] = $data->customerId;
+            }
+
+            $updateSql .= " WHERE id = :id AND company_id = :company_id";
+            
+            $this->conn->prepare($updateSql)->execute($updateParams);
 
             $this->conn->commit();
             $this->jsonResponse(["message" => "Venda atualizada com sucesso"]);
@@ -305,11 +397,11 @@ class SalesController extends ApiController {
                        fn.id as fiscal_id, fn.tipo as fiscal_tipo, fn.numero as fiscal_numero, fn.status as fiscal_status
                 FROM sales s
                 LEFT JOIN customers c ON s.customer_id = c.id
-                LEFT JOIN (
-                    SELECT id, sale_id, tipo, numero, status
-                    FROM fiscal_notes
-                    WHERE company_id = :company_id AND id IN (SELECT MAX(id) FROM fiscal_notes GROUP BY sale_id)
-                ) fn ON s.id = fn.sale_id
+                LEFT JOIN fiscal_notes fn ON (fn.sale_id = s.id AND fn.id = (
+                    SELECT f.id FROM fiscal_notes f 
+                    WHERE f.sale_id = s.id 
+                    ORDER BY f.created_at DESC LIMIT 1
+                ))
                 WHERE s.company_id = :company_id";
         
         $params = [':company_id' => $this->company_id];
@@ -381,6 +473,7 @@ class SalesController extends ApiController {
             $this->conn->prepare("DELETE FROM sale_items WHERE sale_id = :id AND company_id = :company_id")->execute([":id" => $id, ":company_id" => $this->company_id]);
             $this->conn->prepare("DELETE FROM sale_payments WHERE sale_id = :id AND company_id = :company_id")->execute([":id" => $id, ":company_id" => $this->company_id]);
             $this->conn->prepare("DELETE FROM cash_movements WHERE observation LIKE CONCAT('%', :id) AND company_id = :company_id")->execute([":id" => substr($id, 0, 8), ":company_id" => $this->company_id]);
+            $this->conn->prepare("DELETE FROM accounts_receivable WHERE sale_id = :id AND company_id = :company_id")->execute([":id" => $id, ":company_id" => $this->company_id]);
             $this->conn->prepare("DELETE FROM sales WHERE id = :id AND company_id = :company_id")->execute([":id" => $id, ":company_id" => $this->company_id]);
 
             $this->conn->commit();
@@ -388,6 +481,35 @@ class SalesController extends ApiController {
         } catch (Exception $e) {
             $this->conn->rollBack();
             $this->jsonResponse(["message" => "Erro ao remover: " . $e->getMessage()], 500);
+        }
+    }
+
+    public function cancel($id) {
+        $auth = $this->authenticate();
+        require_once __DIR__ . '/../utils.php';
+        try {
+            $this->conn->beginTransaction();
+
+            $stmt = $this->conn->prepare("UPDATE sales SET status = 'cancelada' WHERE id = :id AND company_id = :company_id");
+            $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
+
+            $stmt = $this->conn->prepare("SELECT product_id, quantity, multiplier FROM sale_items WHERE sale_id = :id AND company_id = :company_id");
+            $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);
+            $items = $stmt->fetchAll();
+
+            foreach ($items as $item) {
+                $totalQty = $item['quantity'] * ($item['multiplier'] ?? 1);
+                $this->conn->prepare("UPDATE products SET stock_current = stock_current + :qty WHERE id = :pid AND company_id = :company_id")
+                           ->execute([":qty" => $totalQty, ":pid" => $item['product_id'], ":company_id" => $this->company_id]);
+            }
+
+            $this->conn->prepare("DELETE FROM accounts_receivable WHERE sale_id = :id AND company_id = :company_id")->execute([":id" => $id, ":company_id" => $this->company_id]);
+
+            $this->conn->commit();
+            $this->jsonResponse(["message" => "Venda cancelada com sucesso"]);
+        } catch (Exception $e) {
+            $this->conn->rollBack();
+            $this->jsonResponse(["message" => "Erro ao cancelar: " . $e->getMessage()], 500);
         }
     }
 }

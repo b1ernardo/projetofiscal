@@ -28,7 +28,12 @@ export function useFiscalConfig() {
     return useQuery<FiscalConfig>({
         queryKey: ['fiscalConfig'],
         queryFn: async () => {
-            const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/fiscal/config`);
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/fiscal/config`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             if (!response.ok) {
                 throw new Error('Falha ao obter configurações fiscais');
             }

@@ -142,8 +142,8 @@ class ComandasController extends ApiController {
         $productId = substr($rawProductId, 0, 36);
         
         $multiplier = 1;
-        $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid AND company_id = :company_id");
-        $bc_stmt->execute([':pid' => $productId, ':company_id' => $this->company_id]);
+        $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid");
+        $bc_stmt->execute([':pid' => $productId]);
         $box_configs = $bc_stmt->fetchAll(PDO::FETCH_ASSOC);
         
         foreach ($box_configs as $bc) {
@@ -198,8 +198,8 @@ class ComandasController extends ApiController {
                 $productId = substr($rawProductId, 0, 36);
                 
                 $multiplier = 1;
-                $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid AND company_id = :company_id");
-                $bc_stmt->execute([':pid' => $productId, ':company_id' => $this->company_id]);
+                $bc_stmt = $this->conn->prepare("SELECT quantity, label FROM product_box_configs WHERE product_id = :pid");
+                $bc_stmt->execute([':pid' => $productId]);
                 $box_configs = $bc_stmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 foreach ($box_configs as $bc) {
@@ -366,15 +366,31 @@ class ComandasController extends ApiController {
                         }
                     } else {
                         // Accounts Receivable
-                        $stmt = $this->conn->prepare("INSERT INTO accounts_receivable (id, company_id, description, customer_id, amount, due_date, status, category) VALUES (:id, :company_id, :desc, :cust, :amount, :due, 'pending', 'Vendas')");
-                        $stmt->execute([
-                            ":id" => generateUUID(),
-                            ":company_id" => $this->company_id,
-                            ":desc" => "Venda Comanda Mesa #{$saleNumber} (Prazo)",
-                            ":cust" => $data->customerId ?? null,
-                            ":amount" => $p->amount,
-                            ":due" => date('Y-m-d', strtotime('+30 days'))
-                        ]);
+                        if (!empty($p->installments) && is_array($p->installments)) {
+                            $totalInst = count($p->installments);
+                            foreach ($p->installments as $idx => $inst) {
+                                $stmt = $this->conn->prepare("INSERT INTO accounts_receivable (id, company_id, description, customer_id, amount, due_date, status, category) 
+                                                              VALUES (:id, :company_id, :desc, :cust, :amount, :due, 'pending', 'Vendas')");
+                                $stmt->execute([
+                                    ":id" => generateUUID(),
+                                    ":company_id" => $this->company_id,
+                                    ":desc" => "Venda Comanda Mesa #{$saleNumber} (" . ($idx + 1) . "/" . $totalInst . ")",
+                                    ":cust" => $data->customerId ?? $comandaData['customer_id'] ?? null,
+                                    ":amount" => $inst->amount,
+                                    ":due" => $inst->dueDate
+                                ]);
+                            }
+                        } else {
+                            $stmt = $this->conn->prepare("INSERT INTO accounts_receivable (id, company_id, description, customer_id, amount, due_date, status, category) VALUES (:id, :company_id, :desc, :cust, :amount, :due, 'pending', 'Vendas')");
+                            $stmt->execute([
+                                ":id" => generateUUID(),
+                                ":company_id" => $this->company_id,
+                                ":desc" => "Venda Comanda Mesa #{$saleNumber} (Prazo)",
+                                ":cust" => $data->customerId ?? $comandaData['customer_id'] ?? null,
+                                ":amount" => $p->amount,
+                                ":due" => date('Y-m-d', strtotime('+30 days'))
+                            ]);
+                        }
                     }
                 }
             }

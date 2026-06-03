@@ -1,6 +1,7 @@
 <?php
 
 require_once 'ApiController.php';
+require_once __DIR__ . '/../utils.php';
 
 class FiscalController extends ApiController {
     private $db;
@@ -51,7 +52,7 @@ class FiscalController extends ApiController {
                 'cnpj', 'ie', 'razao_social', 'nome_fantasia', 'logradouro', 'numero',
                 'bairro', 'municipio', 'cod_municipio', 'uf', 'cep', 'fone',
                 'ambiente', 'ultimo_numero_nfe', 'serie_nfe', 'ultimo_numero_nfce',
-                'serie_nfce', 'csc_id', 'csc_token', 'percentual_tributos'
+                'serie_nfce', 'csc_id', 'csc_token', 'percentual_tributos', 'logo_base64'
             ];
 
             if (isset($data['certificado_senha']) && !empty($data['certificado_senha'])) {
@@ -96,6 +97,17 @@ class FiscalController extends ApiController {
     public function emitirAvulsa() {
         ob_start(); // buffer any PHP warnings so they don't break JSON
         header('Content-Type: application/json; charset=utf-8');
+
+        // Captura erros fatais do PHP e retorna JSON
+        register_shutdown_function(function() {
+            $err = error_get_last();
+            if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+                ob_clean();
+                http_response_code(500);
+                echo json_encode(["message" => "Erro Fatal PHP: " . $err['message'] . " em " . basename($err['file']) . " linha " . $err['line']]);
+            }
+        });
+
         $auth = $this->authenticate();
         require_once __DIR__ . '/../src/Services/FiscalService.php';
         
@@ -112,7 +124,7 @@ class FiscalController extends ApiController {
             $this->db->beginTransaction();
 
             $isExistingSale = !empty($data['saleId']);
-            $saleId = $isExistingSale ? $data['saleId'] : bin2hex(random_bytes(16));
+            $saleId = $isExistingSale ? $data['saleId'] : generateUUID();
             $totalAmount = $data['total_amount'] ?? 0;
             $discount = $data['discount'] ?? 0;
             $paymentMethod = $data['payments'][0]['methodName'] ?? 'DINHEIRO';
@@ -129,11 +141,17 @@ class FiscalController extends ApiController {
                 ]);
             } else {
                 // 1. Criar Venda
-                $stmt = $this->db->prepare("INSERT INTO sales (id, company_id, total_amount, payment_method, created_by, status, discount) 
-                                            VALUES (:id, :company_id, :total, :method, :uid, 'completed', :discount)");
+                // Calcular próximo número da venda POR EMPRESA
+                $stmtNum = $this->db->prepare("SELECT COALESCE(MAX(sale_number), 0) + 1 FROM sales WHERE company_id = :company_id FOR UPDATE");
+                $stmtNum->execute([':company_id' => $this->company_id]);
+                $saleNumber = (int)$stmtNum->fetchColumn();
+
+                $stmt = $this->db->prepare("INSERT INTO sales (id, company_id, sale_number, total_amount, payment_method, created_by, status, discount) 
+                                            VALUES (:id, :company_id, :sale_number, :total, :method, :uid, 'completed', :discount)");
                 $stmt->execute([
                     ":id" => $saleId,
                     ":company_id" => $this->company_id,
+                    ":sale_number" => $saleNumber,
                     ":total" => $totalAmount,
                     ":method" => $paymentMethod,
                     ":uid" => $auth['id'] ?? null,
@@ -186,11 +204,14 @@ class FiscalController extends ApiController {
                     'unit_price' => (float)$item['unit_price'],
                     'cst' => $item['cst'] ?? '00',
                     'csosn' => $item['csosn'] ?? '102',
-                    'origem' => $item['origem'] ?? '0'
+                    'origem' => $item['origem'] ?? '0',
+                    'pICMS' => $item['pICMS'] ?? 0,
+                    'pPIS' => $item['pPIS'] ?? 0,
+                    'pCOFINS' => $item['pCOFINS'] ?? 0
                 ];
             }
 
-            $service = new \App\Services\FiscalService($this->db);
+            $service = new \App\Services\FiscalService($this->db, $this->company_id);
             $model = '55'; // NF-e Avulsa é sempre 55
             
             // Passo 1: Geração XML e Assinatura
@@ -201,17 +222,23 @@ class FiscalController extends ApiController {
             $xmlFinal = $transmissao['xml'];
             
             // Passo 3: Salvar histórico
-            $stmt = $this->db->prepare("INSERT INTO fiscal_notes (id, sale_id, tipo, numero, serie, status, xml_path) 
-                                        VALUES (:id, :sale_id, :tipo, :numero, :serie, 'generated', :xml)");
-            $noteId = bin2hex(random_bytes(16));
-            
+            $stmt = $this->db->prepare("INSERT INTO fiscal_notes (id, company_id, sale_id, tipo, numero, serie, status, xml_path, customer_name, data_emissao, v_cbs, v_ibs, v_is)
+                                        VALUES (:id, :company_id, :sale_id, :tipo, :numero, :serie, 'generated', :xml, :customer_name, :data_emissao, :v_cbs, :v_ibs, :v_is)");
+            $noteId = generateUUID();
+
             $stmt->execute([
-                ":id" => $noteId,
-                ":sale_id" => $saleId,
-                ":tipo" => 'NFE',
-                ":numero" => $res['nNF'],
-                ":serie" => $res['serie'],
-                ":xml" => $xmlFinal
+                ":id"            => $noteId,
+                ":company_id"    => $this->company_id,
+                ":sale_id"       => $saleId,
+                ":tipo"          => 'NFE',
+                ":numero"        => $res['nNF'],
+                ":serie"         => $res['serie'],
+                ":xml"           => $xmlFinal,
+                ":customer_name" => $data['customer']['nome'] ?? null,
+                ":data_emissao"  => isset($res['dhEmi']) ? date('Y-m-d H:i:s', strtotime($res['dhEmi'])) : date('Y-m-d H:i:s'),
+                ":v_cbs"         => $res['vCBS'] ?? 0,
+                ":v_ibs"         => $res['vIBS'] ?? 0,
+                ":v_is"          => $res['vIS']  ?? 0,
             ]);
 
             // Atualizar config
@@ -320,6 +347,8 @@ class FiscalController extends ApiController {
         $this->authenticate();
         $tipo   = strtoupper($_GET['tipo']   ?? 'NFE'); // NFE | NFCE
         $search = trim($_GET['search'] ?? '');
+        $startDate = $_GET['startDate'] ?? '';
+        $endDate   = $_GET['endDate']   ?? '';
 
         $where  = "fn.tipo = :tipo AND (s.company_id = :company_id OR s.company_id IS NULL)";
         $params = [':tipo' => $tipo, ':company_id' => $this->company_id];
@@ -329,16 +358,25 @@ class FiscalController extends ApiController {
             $params[':search'] = "%$search%";
         }
 
+        if ($startDate) {
+            $where .= " AND DATE(COALESCE(fn.data_emissao, fn.created_at)) >= :startDate";
+            $params[':startDate'] = $startDate;
+        }
+        if ($endDate) {
+            $where .= " AND DATE(COALESCE(fn.data_emissao, fn.created_at)) <= :endDate";
+            $params[':endDate'] = $endDate;
+        }
+
         $sql = "SELECT 
                     fn.id, fn.sale_id, fn.tipo, fn.numero, fn.serie, fn.chave,
-                    fn.status, fn.protocolo, fn.motivo_rejeicao, fn.created_at,
+                    fn.status, fn.protocolo, fn.motivo_rejeicao, fn.created_at, fn.data_emissao,
                     s.sale_number, s.total_amount,
-                    COALESCE(c.name, 'Consumidor Final') as customer_name
+                    COALESCE(fn.customer_name, c.name, 'Consumidor Final') as customer_name
                 FROM fiscal_notes fn
                 LEFT JOIN sales s    ON fn.sale_id  = s.id
                 LEFT JOIN customers c ON s.customer_id = c.id
                 WHERE $where
-                ORDER BY fn.created_at DESC
+                ORDER BY COALESCE(fn.data_emissao, fn.created_at) DESC
                 LIMIT 500";
 
         try {
@@ -360,17 +398,17 @@ class FiscalController extends ApiController {
     }
 
     public function emitirNFe() {
+        // index.php já faz ob_start(); não empilhar um segundo nível
+        $this->authenticate();
         require_once __DIR__ . '/../src/Services/FiscalService.php';
         $data = json_decode(file_get_contents("php://input"), true);
-        
+
         if (!isset($data['saleId'])) {
-            http_response_code(400);
-            echo json_encode(["message" => "saleId obrigatório"]);
-            return;
+            $this->jsonResponse(["message" => "saleId obrigatório"], 400);
         }
 
         try {
-            $service = new \App\Services\FiscalService($this->db);
+            $service = new \App\Services\FiscalService($this->db, $this->company_id);
             $model = $data['model'] ?? '55'; // 55 = NFe, 65 = NFCe
             
             // Busca a Venda no banco
@@ -396,8 +434,22 @@ class FiscalController extends ApiController {
                 'payment_method' => $sale['payment_method']
             ];
 
-            // Busca os Itens da Venda
-            $stmtItems = $this->db->prepare("SELECT si.*, p.name, p.code, p.ncm, p.cest, p.cfop_padrao, p.unit, p.cst, p.csosn, p.origem FROM sale_items si JOIN products p ON si.product_id = p.id JOIN sales s ON si.sale_id = s.id WHERE si.sale_id = :id AND s.company_id = :company_id");
+            // Busca os Itens da Venda (inclui alíquotas fiscais e campos da reforma)
+            $stmtItems = $this->db->prepare("
+                SELECT si.*,
+                       p.name, p.code, p.ncm, p.cest, p.cfop_padrao, p.unit,
+                       p.cst, p.csosn, p.origem,
+                       p.icms_aliquota  AS pICMS,
+                       p.pis_aliquota   AS pPIS,
+                       p.cofins_aliquota AS pCOFINS,
+                       COALESCE(p.cbs_regime, 'padrao') AS cbs_regime,
+                       COALESCE(p.is_incide, 0)         AS is_incide,
+                       COALESCE(p.is_aliquota, 0)       AS is_aliquota
+                FROM sale_items si
+                JOIN products p ON si.product_id = p.id
+                JOIN sales s    ON si.sale_id = s.id
+                WHERE si.sale_id = :id AND s.company_id = :company_id
+            ");
             $stmtItems->execute([':id' => $data['saleId'], ':company_id' => $this->company_id]);
             $items = $stmtItems->fetchAll(PDO::FETCH_ASSOC);
 
@@ -415,35 +467,68 @@ class FiscalController extends ApiController {
             $xmlFinal = $transmissao['xml'];
             
             // Passo 3: Salvar histórico da nota protocolada no banco
-            $stmt = $this->db->prepare("INSERT INTO fiscal_notes (id, sale_id, tipo, numero, serie, status, xml_path) 
-                                        VALUES (:id, :sale_id, :tipo, :numero, :serie, 'generated', :xml)");
-            $noteId = bin2hex(random_bytes(16)); // UUID simples
-            
+            $stmt = $this->db->prepare("INSERT INTO fiscal_notes (id, company_id, sale_id, tipo, numero, serie, status, xml_path, customer_name, data_emissao, v_cbs, v_ibs, v_is)
+                                        VALUES (:id, :company_id, :sale_id, :tipo, :numero, :serie, 'generated', :xml, :customer_name, :data_emissao, :v_cbs, :v_ibs, :v_is)");
+            $noteId = generateUUID();
+
             $stmt->execute([
-                ":id" => $noteId,
-                ":sale_id" => $data['saleId'],
-                ":tipo" => ($model == '55') ? 'NFE' : 'NFCE',
-                ":numero" => $res['nNF'],
-                ":serie" => $res['serie'],
-                ":xml" => $xmlFinal // Salvamos a nota JÁ COM o protocolo de recebimento oficial da SEFAZ
+                ":id"            => $noteId,
+                ":company_id"    => $this->company_id,
+                ":sale_id"       => $data['saleId'],
+                ":tipo"          => ($model == '55') ? 'NFE' : 'NFCE',
+                ":numero"        => $res['nNF'],
+                ":serie"         => $res['serie'],
+                ":xml"           => $xmlFinal,
+                ":customer_name" => $sale['customer_name'] ?? $sale['c_name'],
+                ":data_emissao"  => isset($res['dhEmi']) ? date('Y-m-d H:i:s', strtotime($res['dhEmi'])) : date('Y-m-d H:i:s'),
+                ":v_cbs"         => $res['vCBS'] ?? 0,
+                ":v_ibs"         => $res['vIBS'] ?? 0,
+                ":v_is"          => $res['vIS']  ?? 0,
             ]);
 
             // Atualizar controle de última numeração emitida
             $field = ($model == '55') ? 'ultimo_numero_nfe' : 'ultimo_numero_nfce';
             $this->db->prepare("UPDATE config_fiscal SET $field = :num WHERE company_id = :company_id")->execute([":num" => $res['nNF'], ":company_id" => $this->company_id]);
 
-            echo json_encode([
+            $chave = '';
+            $qrCode = '';
+            $urlConsulta = '';
+            try {
+                $xml = @simplexml_load_string($xmlFinal);
+                if ($xml) {
+                    $xml->registerXPathNamespace('ns', 'http://www.portalfiscal.inf.br/nfe');
+                    
+                    $chaveArr = $xml->xpath('//ns:protNFe/ns:infProt/ns:chNFe');
+                    $chave = $chaveArr ? (string)$chaveArr[0] : '';
+                    
+                    $qrCodeArr = $xml->xpath('//ns:infNFeSupl/ns:qrCode');
+                    $qrCode = $qrCodeArr ? (string)$qrCodeArr[0] : '';
+                    
+                    $urlArr = $xml->xpath('//ns:infNFeSupl/ns:urlChave');
+                    $urlConsulta = $urlArr ? (string)$urlArr[0] : '';
+                }
+            } catch (\Throwable $e) {
+                // Silently fail, we already saved the XML
+            }
+
+            $this->jsonResponse([
                 "message" => "Nota autorizada com sucesso na Sefaz!",
                 "noteId" => $noteId,
                 "nNF" => $res['nNF'],
-                "protocol" => $transmissao['protocol']
+                "serie" => $res['serie'],
+                "protocol" => $transmissao['protocol'],
+                "chave" => $chave,
+                "qrCode" => $qrCode,
+                "urlConsulta" => $urlConsulta
             ]);
 
-        } catch (\Exception $e) {
-            http_response_code(500);
-            echo json_encode(["message" => "Erro na emissão: " . $e->getMessage()]);
+        } catch (\Throwable $e) {
+            ob_clean();
+            $this->jsonResponse(["message" => "Erro na emissão: " . $e->getMessage()], 500);
         }
-    }    public function cancelarNFe() {
+    }
+
+    public function cancelarNFe() {
         $this->authenticate();
         $data = json_decode(file_get_contents("php://input"), true);
 
@@ -472,7 +557,7 @@ class FiscalController extends ApiController {
                 return;
             }
 
-            $service = new \App\Services\FiscalService($this->db);
+            $service = new \App\Services\FiscalService($this->db, $this->company_id);
             $modelCode = ($note['tipo'] === 'NFE') ? '55' : '65';
             
             $cancelamento = $service->cancelarNFe($note['xml_path'], $data['justificativa'], $modelCode);
@@ -480,6 +565,24 @@ class FiscalController extends ApiController {
             if ($cancelamento['success']) {
                 $stmt = $this->db->prepare("UPDATE fiscal_notes SET status = 'cancelled' WHERE id = :id");
                 $stmt->execute([":id" => $note['id']]);
+
+                // 1. Atualizar status da venda
+                $stmt = $this->db->prepare("UPDATE sales SET status = 'cancelada' WHERE id = :sale_id AND company_id = :company_id");
+                $stmt->execute([":sale_id" => $data['saleId'], ":company_id" => $this->company_id]);
+
+                // 2. Excluir parcelas em contas a receber (conforme solicitado pelo usuário)
+                $stmt = $this->db->prepare("DELETE FROM accounts_receivable WHERE sale_id = :sale_id AND company_id = :company_id");
+                $stmt->execute([":sale_id" => $data['saleId'], ":company_id" => $this->company_id]);
+
+                // 3. Estornar Estoque
+                $stmt = $this->db->prepare("SELECT product_id, quantity, multiplier FROM sale_items WHERE sale_id = :sale_id AND company_id = :company_id");
+                $stmt->execute([":sale_id" => $data['saleId'], ":company_id" => $this->company_id]);
+                $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($items as $item) {
+                    $totalQty = $item['quantity'] * ($item['multiplier'] ?? 1);
+                    $this->db->prepare("UPDATE products SET stock_current = stock_current + :qty WHERE id = :pid AND company_id = :company_id")
+                               ->execute([":qty" => $totalQty, ":pid" => $item['product_id'], ":company_id" => $this->company_id]);
+                }
 
                 echo json_encode([
                     "message" => "Nota cancelada com sucesso na Sefaz!",
@@ -495,10 +598,22 @@ class FiscalController extends ApiController {
     }
 
     public function gerarDanfe($id) {
+        $this->authenticate(); // ← NECESSÁRIO para popular $this->company_id
         require_once __DIR__ . '/../src/Services/FiscalService.php';
         try {
-            $stmt = $this->db->prepare("SELECT xml_path, tipo FROM fiscal_notes WHERE id = :id");
-            $stmt->execute([":id" => $id]);
+            // Busca a nota filtrando também por company_id (via JOIN com sales)
+            $stmt = $this->db->prepare(
+                "SELECT fn.xml_path, fn.tipo 
+                 FROM fiscal_notes fn
+                 LEFT JOIN sales s ON fn.sale_id = s.id
+                 WHERE fn.id = :id 
+                   AND (s.company_id = :company_id OR fn.company_id = :company_id2)"
+            );
+            $stmt->execute([
+                ':id'         => $id,
+                ':company_id' => $this->company_id,
+                ':company_id2'=> $this->company_id,
+            ]);
             $note = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$note) {
@@ -507,7 +622,7 @@ class FiscalController extends ApiController {
                 return;
             }
 
-            $service = new \App\Services\FiscalService($this->db);
+            $service = new \App\Services\FiscalService($this->db, $this->company_id);
             // Translate 'tipo' back to model code (NFE=55, NFCE=65)
             $modelCode = ($note['tipo'] === 'NFE') ? '55' : '65';
             $pdf = $service->generateDanfe($note['xml_path'], $modelCode);

@@ -60,6 +60,12 @@ class ProductsController extends ApiController {
             $p['ipi_aliquota'] = $p['ipi_aliquota'] !== null ? (float)$p['ipi_aliquota'] : null;
             $p['product_code'] = $p['product_code'] !== null ? (int)$p['product_code'] : null;
             $p['venda_delivery'] = (bool)($p['venda_delivery'] ?? 0);
+            $p['icms_aliquota'] = isset($p['icms_aliquota']) ? (float)$p['icms_aliquota'] : 0.0;
+            $p['gross_weight']  = isset($p['gross_weight'])  ? (float)$p['gross_weight']  : 0.0;
+            // Reforma Tributária EC 132/2023
+            $p['cbs_regime']    = $p['cbs_regime']  ?? 'padrao';
+            $p['is_incide']     = (bool)($p['is_incide']    ?? 0);
+            $p['is_aliquota']   = isset($p['is_aliquota'])  ? (float)$p['is_aliquota'] : 0.0;
         }
 
         $this->jsonResponse($products);
@@ -92,46 +98,63 @@ class ProductsController extends ApiController {
 
             $venda_delivery = isset($data->venda_delivery) ? (int)$data->venda_delivery : 0;
 
-            $stmt = $this->conn->prepare("INSERT INTO products 
-                  (id, company_id, name, category_id, product_code, code, cost_price, sale_price, sale_price2, stock_current, stock_min, unit, photo_url, active, ncm, cest, cfop_padrao, origem, cst, csosn, pis_cst_entrada, pis_cst_saida, pis_aliquota, cofins_aliquota, ipi_cst, ipi_aliquota, venda_delivery) 
-                  VALUES (:id, :company_id, :name, :category_id, :product_code, :code, :cost_price, :sale_price, :sale_price2, :stock_current, :stock_min, :unit, :photo_url, :active, :ncm, :cest, :cfop_padrao, :origem, :cst, :csosn, :pis_cst_entrada, :pis_cst_saida, :pis_aliquota, :cofins_aliquota, :ipi_cst, :ipi_aliquota, :venda_delivery)");
-            
+            $stmt = $this->conn->prepare("INSERT INTO products
+                  (id, company_id, name, category_id, product_code, code, cost_price, sale_price, sale_price2,
+                   stock_current, stock_min, unit, photo_url, active,
+                   ncm, cest, cfop_padrao, origem, cst, csosn,
+                   pis_cst_entrada, pis_cst_saida, pis_aliquota, cofins_aliquota,
+                   ipi_cst, ipi_aliquota, icms_aliquota, gross_weight, venda_delivery,
+                   cbs_regime, is_incide, is_aliquota)
+                  VALUES (:id, :company_id, :name, :category_id, :product_code, :code, :cost_price, :sale_price, :sale_price2,
+                   :stock_current, :stock_min, :unit, :photo_url, :active,
+                   :ncm, :cest, :cfop_padrao, :origem, :cst, :csosn,
+                   :pis_cst_entrada, :pis_cst_saida, :pis_aliquota, :cofins_aliquota,
+                   :ipi_cst, :ipi_aliquota, :icms_aliquota, :gross_weight, :venda_delivery,
+                   :cbs_regime, :is_incide, :is_aliquota)");
+
             $stmt->execute([
-                ":id" => $id,
-                ":company_id" => $this->company_id,
-                ":name" => $data->name,
-                ":category_id" => $categoryId,
-                ":product_code" => $data->product_code ?? null,
-                ":code" => $data->code ?? null,
-                ":cost_price" => $data->cost_price ?? 0,
-                ":sale_price" => $data->sale_price,
-                ":sale_price2" => isset($data->sale_price2) ? (float)$data->sale_price2 : 0.0,
-                ":stock_current" => $data->stock_current ?? 0,
-                ":stock_min" => $data->stock_min ?? 0,
-                ":unit" => $data->unit ?? 'UN',
-                ":photo_url" => $data->photo_url ?? null,
-                ":active" => 1,
-                ":ncm" => preg_replace('/\D/', '', $data->ncm ?? ''),
-                ":cest" => preg_replace('/\D/', '', $data->cest ?? ''),
-                ":cfop_padrao" => preg_replace('/\D/', '', $data->cfop_padrao ?? '5102'),
-                ":origem" => $data->origem !== null ? (int)$data->origem : 0,
-                ":cst" => $cst,
-                ":csosn" => $csosn,
-                ":pis_cst_entrada" => $pis_cst_entrada,
-                ":pis_cst_saida" => $pis_cst_saida,
-                ":pis_aliquota" => $pis_aliquota,
-                ":cofins_aliquota" => $cofins_aliquota,
-                ":ipi_cst" => $ipi_cst,
-                ":ipi_aliquota" => $ipi_aliquota,
-                ":venda_delivery" => $venda_delivery
+                ":id"             => $id,
+                ":company_id"     => $this->company_id,
+                ":name"           => $data->name,
+                ":category_id"    => $categoryId,
+                ":product_code"   => $data->product_code ?? null,
+                ":code"           => $data->code ?? null,
+                ":cost_price"     => $data->cost_price ?? 0,
+                ":sale_price"     => $data->sale_price,
+                ":sale_price2"    => isset($data->sale_price2) ? (float)$data->sale_price2 : 0.0,
+                ":stock_current"  => $data->stock_current ?? 0,
+                ":stock_min"      => $data->stock_min ?? 0,
+                ":unit"           => $data->unit ?? 'UN',
+                ":photo_url"      => $data->photo_url ?? null,
+                ":active"         => 1,
+                ":ncm"            => preg_replace('/\D/', '', $data->ncm ?? ''),
+                ":cest"           => preg_replace('/\D/', '', $data->cest ?? ''),
+                ":cfop_padrao"    => preg_replace('/\D/', '', $data->cfop_padrao ?? '5102'),
+                ":origem"         => $data->origem !== null ? (int)$data->origem : 0,
+                ":cst"            => $cst,
+                ":csosn"          => $csosn,
+                ":pis_cst_entrada"=> $pis_cst_entrada,
+                ":pis_cst_saida"  => $pis_cst_saida,
+                ":pis_aliquota"   => $pis_aliquota,
+                ":cofins_aliquota"=> $cofins_aliquota,
+                ":ipi_cst"        => $ipi_cst,
+                ":ipi_aliquota"   => $ipi_aliquota,
+                ":icms_aliquota"  => $data->icms_aliquota ?? 0.0,
+                ":gross_weight"   => $data->gross_weight ?? 0.0,
+                ":venda_delivery" => $venda_delivery,
+                // Reforma Tributária EC 132/2023
+                ":cbs_regime"     => $data->cbs_regime  ?? 'padrao',
+                ":is_incide"      => !empty($data->is_incide) ? 1 : 0,
+                ":is_aliquota"    => isset($data->is_aliquota) ? (float)$data->is_aliquota : 0.0,
             ]);
 
             if (!empty($data->boxConfigs) && is_array($data->boxConfigs)) {
                 foreach ($data->boxConfigs as $bc) {
                     if (!empty($bc->label) && !empty($bc->quantity) && !empty($bc->price)) {
-                        $bc_stmt = $this->conn->prepare("INSERT INTO product_box_configs (id, product_id, label, quantity, price) VALUES (:id, :pid, :lbl, :qty, :prc)");
+                        $bc_stmt = $this->conn->prepare("INSERT INTO product_box_configs (id, company_id, product_id, label, quantity, price) VALUES (:id, :company_id, :pid, :lbl, :qty, :prc)");
                         $bc_stmt->execute([
                             ":id" => generateUUID(),
+                            ":company_id" => $this->company_id,
                             ":pid" => $id,
                             ":lbl" => $bc->label,
                             ":qty" => $bc->quantity,
@@ -171,55 +194,64 @@ class ProductsController extends ApiController {
             $ipi_aliquota = isset($data->ipi_aliquota) ? $data->ipi_aliquota : 0.0;
             $venda_delivery = isset($data->venda_delivery) ? (int)$data->venda_delivery : 0;
 
-            $stmt = $this->conn->prepare("UPDATE products SET 
-                  name = :name, category_id = :category_id, product_code = :product_code, code = :code, 
-                  cost_price = :cost_price, sale_price = :sale_price, sale_price2 = :sale_price2, 
-                  stock_current = :stock_current, stock_min = :stock_min, 
-                  unit = :unit, photo_url = :photo_url, 
-                  ncm = :ncm, cest = :cest, cfop_padrao = :cfop_padrao, origem = :origem, 
+            $stmt = $this->conn->prepare("UPDATE products SET
+                  name = :name, category_id = :category_id, product_code = :product_code, code = :code,
+                  cost_price = :cost_price, sale_price = :sale_price, sale_price2 = :sale_price2,
+                  stock_current = :stock_current, stock_min = :stock_min,
+                  unit = :unit, photo_url = :photo_url,
+                  ncm = :ncm, cest = :cest, cfop_padrao = :cfop_padrao, origem = :origem,
                   cst = :cst, csosn = :csosn,
                   pis_cst_entrada = :pis_cst_entrada, pis_cst_saida = :pis_cst_saida,
                   pis_aliquota = :pis_aliquota, cofins_aliquota = :cofins_aliquota,
                   ipi_cst = :ipi_cst, ipi_aliquota = :ipi_aliquota,
-                  venda_delivery = :venda_delivery
+                  icms_aliquota = :icms_aliquota, gross_weight = :gross_weight,
+                  venda_delivery = :venda_delivery,
+                  cbs_regime = :cbs_regime, is_incide = :is_incide, is_aliquota = :is_aliquota
                   WHERE id = :id AND company_id = :company_id");
-            
+
             $stmt->execute([
-                ":id" => $data->id,
-                ":company_id" => $this->company_id,
-                ":name" => $data->name,
-                ":category_id" => $categoryId,
-                ":product_code" => $data->product_code ?? null,
-                ":code" => $data->code ?? null,
-                ":cost_price" => $data->cost_price ?? 0,
-                ":sale_price" => $data->sale_price,
-                ":sale_price2" => isset($data->sale_price2) ? (float)$data->sale_price2 : 0.0,
-                ":stock_current" => $data->stock_current ?? 0,
-                ":stock_min" => $data->stock_min ?? 0,
-                ":unit" => $data->unit ?? 'un',
-                ":photo_url" => $data->photo_url ?? null,
-                ":ncm" => preg_replace('/\D/', '', $data->ncm ?? ''),
-                ":cest" => preg_replace('/\D/', '', $data->cest ?? ''),
-                ":cfop_padrao" => preg_replace('/\D/', '', $data->cfop_padrao ?? '5102'),
-                ":origem" => $data->origem !== null ? (int)$data->origem : 0,
-                ":cst" => $cst,
-                ":csosn" => $csosn,
-                ":pis_cst_entrada" => $pis_cst_entrada,
-                ":pis_cst_saida" => $pis_cst_saida,
-                ":pis_aliquota" => $pis_aliquota,
-                ":cofins_aliquota" => $cofins_aliquota,
-                ":ipi_cst" => $ipi_cst,
-                ":ipi_aliquota" => $ipi_aliquota,
-                ":venda_delivery" => $venda_delivery
+                ":id"             => $data->id,
+                ":company_id"     => $this->company_id,
+                ":name"           => $data->name,
+                ":category_id"    => $categoryId,
+                ":product_code"   => $data->product_code ?? null,
+                ":code"           => $data->code ?? null,
+                ":cost_price"     => $data->cost_price ?? 0,
+                ":sale_price"     => $data->sale_price,
+                ":sale_price2"    => isset($data->sale_price2) ? (float)$data->sale_price2 : 0.0,
+                ":stock_current"  => $data->stock_current ?? 0,
+                ":stock_min"      => $data->stock_min ?? 0,
+                ":unit"           => $data->unit ?? 'un',
+                ":photo_url"      => $data->photo_url ?? null,
+                ":ncm"            => preg_replace('/\D/', '', $data->ncm ?? ''),
+                ":cest"           => preg_replace('/\D/', '', $data->cest ?? ''),
+                ":cfop_padrao"    => preg_replace('/\D/', '', $data->cfop_padrao ?? '5102'),
+                ":origem"         => $data->origem !== null ? (int)$data->origem : 0,
+                ":cst"            => $cst,
+                ":csosn"          => $csosn,
+                ":pis_cst_entrada"=> $pis_cst_entrada,
+                ":pis_cst_saida"  => $pis_cst_saida,
+                ":pis_aliquota"   => $pis_aliquota,
+                ":cofins_aliquota"=> $cofins_aliquota,
+                ":ipi_cst"        => $ipi_cst,
+                ":ipi_aliquota"   => $ipi_aliquota,
+                ":icms_aliquota"  => $data->icms_aliquota ?? 0.0,
+                ":gross_weight"   => $data->gross_weight ?? 0.0,
+                ":venda_delivery" => $venda_delivery,
+                // Reforma Tributária EC 132/2023
+                ":cbs_regime"     => $data->cbs_regime  ?? 'padrao',
+                ":is_incide"      => !empty($data->is_incide) ? 1 : 0,
+                ":is_aliquota"    => isset($data->is_aliquota) ? (float)$data->is_aliquota : 0.0,
             ]);
 
             // Sincroniza Box Configs (Deleta e insere)
             $this->conn->prepare("DELETE FROM product_box_configs WHERE product_id = :pid")->execute([":pid" => $data->id]);
             if (!empty($data->boxConfigs)) {
                 foreach ($data->boxConfigs as $bc) {
-                    $bc_stmt = $this->conn->prepare("INSERT INTO product_box_configs (id, product_id, label, quantity, price) VALUES (:id, :pid, :label, :qty, :price)");
+                    $bc_stmt = $this->conn->prepare("INSERT INTO product_box_configs (id, company_id, product_id, label, quantity, price) VALUES (:id, :company_id, :pid, :label, :qty, :price)");
                     $bc_stmt->execute([
                         ":id" => generateUUID(),
+                        ":company_id" => $this->company_id,
                         ":pid" => $data->id,
                         ":label" => $bc->label,
                         ":qty" => $bc->quantity,
@@ -256,6 +288,78 @@ class ProductsController extends ApiController {
         $this->jsonResponse(["message" => "Produto removido (desativado)"]);
     }
 
+    public function adjustStock() {
+        require_once __DIR__ . '/../utils.php';
+        $payload = $this->authenticate();
+        $userId = $payload['id'] ?? null;
+        $data = $this->getPostData();
+
+        if (empty($data->product_id) || !isset($data->quantity) || empty($data->type)) {
+            $this->jsonResponse(["message" => "ID do produto, quantidade e tipo são obrigatórios"], 400);
+        }
+
+        $productId = $data->product_id;
+        $quantity = (float)$data->quantity;
+        $type = $data->type; // 'entrada' or 'saida'
+        $observation = $data->observation ?? '';
+
+        if ($type !== 'entrada' && $type !== 'saida') {
+            $this->jsonResponse(["message" => "Tipo de movimentação inválido (deve ser 'entrada' ou 'saida')"], 400);
+        }
+
+        if ($quantity <= 0) {
+            $this->jsonResponse(["message" => "A quantidade deve ser maior que zero"], 400);
+        }
+
+        try {
+            $this->conn->beginTransaction();
+
+            // 1. Verifica se o produto pertence à empresa
+            $checkStmt = $this->conn->prepare("SELECT id, stock_current FROM products WHERE id = :id AND company_id = :company_id");
+            $checkStmt->execute([":id" => $productId, ":company_id" => $this->company_id]);
+            $product = $checkStmt->fetch();
+
+            if (!$product) {
+                $this->jsonResponse(["message" => "Produto não encontrado"], 404);
+            }
+
+            // 2. Calcula novo estoque
+            $adjustment = ($type === 'entrada') ? $quantity : -$quantity;
+
+            // 3. Atualiza o estoque na tabela products
+            $updateStmt = $this->conn->prepare("UPDATE products SET stock_current = stock_current + :adj WHERE id = :id AND company_id = :company_id");
+            $updateStmt->execute([
+                ":adj" => $adjustment,
+                ":id" => $productId,
+                ":company_id" => $this->company_id
+            ]);
+
+            // 4. Insere a movimentação de estoque
+            $movId = generateUUID();
+            $movStmt = $this->conn->prepare("INSERT INTO stock_movements (id, company_id, product_id, quantity, type, observation, created_by, created_at) 
+                VALUES (:id, :company_id, :product_id, :quantity, :type, :observation, :created_by, :created_at)");
+            
+            $movStmt->execute([
+                ":id" => $movId,
+                ":company_id" => $this->company_id,
+                ":product_id" => $productId,
+                ":quantity" => $quantity,
+                ":type" => $type,
+                ":observation" => $observation,
+                ":created_by" => $userId,
+                ":created_at" => date('Y-m-d H:i:s')
+            ]);
+
+            $this->conn->commit();
+            $this->jsonResponse(["message" => "Estoque ajustado com sucesso", "new_stock" => (float)$product['stock_current'] + $adjustment]);
+        } catch (\Exception $e) {
+            if ($this->conn->inTransaction()) {
+                $this->conn->rollBack();
+            }
+            $this->jsonResponse(["message" => "Erro ao processar movimentação: " . $e->getMessage()], 500);
+        }
+    }
+
     public function getNextCode() {
         $this->authenticate();
         $stmt = $this->conn->prepare("SELECT MAX(product_code) as max_code FROM products WHERE company_id = :company_id");
@@ -265,3 +369,4 @@ class ProductsController extends ApiController {
         $this->jsonResponse(["nextCode" => $next]);
     }
 }
+

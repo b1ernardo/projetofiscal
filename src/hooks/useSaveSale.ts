@@ -10,6 +10,10 @@ interface CartItem {
 export interface PaymentEntry {
   methodName: string;
   amount: number;
+  installments?: {
+    dueDate: string;
+    amount: number;
+  }[];
 }
 
 interface SaveSaleParams {

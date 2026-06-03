@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { CreditCard, Banknote, Smartphone, CheckCircle, Plus, X, User } from "lucide-react";
+import { CreditCard, Banknote, Smartphone, CheckCircle, Plus, X, User, CalendarDays } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,10 @@ import { Label } from "@/components/ui/label";
 export interface PaymentEntry {
   methodName: string;
   amount: number;
+  installments?: {
+    dueDate: string;
+    amount: number;
+  }[];
 }
 
 interface CheckoutDialogProps {
@@ -36,6 +40,10 @@ export function CheckoutDialog({ open, onOpenChange, total, onConfirm }: Checkou
   const [customerId, setCustomerId] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
 
+  // Estados para parcelamento (exclusivo para 'Conta')
+  const [numInstallments, setNumInstallments] = useState<number>(1);
+  const [intervalDays, setIntervalDays] = useState<number>(30);
+
   const { data: customers = [] } = useQuery({
     queryKey: ["customers-list"],
     queryFn: async () => {
@@ -51,6 +59,8 @@ export function CheckoutDialog({ open, onOpenChange, total, onConfirm }: Checkou
     if (open) {
       setPayments([]);
       setCustomerId(undefined);
+      setNumInstallments(1);
+      setIntervalDays(30);
       fetch(`${import.meta.env.VITE_API_URL}/payment_methods`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -90,6 +100,29 @@ export function CheckoutDialog({ open, onOpenChange, total, onConfirm }: Checkou
     setPayments((prev) => prev.filter((p) => p.methodId !== methodId));
   };
 
+  const generateInstallments = (amount: number, count: number, interval: number) => {
+    const installments = [];
+    const baseAmount = Math.floor((amount / count) * 100) / 100;
+    let totalAssigned = 0;
+
+    for (let i = 0; i < count; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() + (i + 1) * interval);
+      
+      let currentAmount = baseAmount;
+      if (i === count - 1) {
+        currentAmount = Math.round((amount - totalAssigned) * 100) / 100;
+      }
+      totalAssigned += currentAmount;
+
+      installments.push({
+        dueDate: date.toISOString().split('T')[0],
+        amount: currentAmount
+      });
+    }
+    return installments;
+  };
+
   const handleConfirm = async () => {
     if (payments.length === 0) {
       toast.error("Adicione pelo menos uma forma de pagamento");
@@ -100,37 +133,51 @@ export function CheckoutDialog({ open, onOpenChange, total, onConfirm }: Checkou
       toast.error(`O valor pago (${formatCurrency(totalPaid)}) não confere com o total (${formatCurrency(total)})`);
       return;
     }
+
+    const isContaSelected = payments.some(p => p.methodName.toLowerCase() === 'conta');
+    if (isContaSelected && (!customerId || customerId === 'none')) {
+      toast.error("Vendas em 'Conta' exigem a seleção de um cliente.");
+      return;
+    }
+
     setLoading(true);
     try {
-      await onConfirm(
-        payments.map((p) => ({ methodName: p.methodName, amount: p.amount })),
-        customerId
-      );
+      const finalPayments: PaymentEntry[] = payments.map((p) => {
+        const entry: PaymentEntry = { methodName: p.methodName, amount: p.amount };
+        if (p.methodName.toLowerCase() === 'conta') {
+          entry.installments = generateInstallments(p.amount, numInstallments, intervalDays);
+        }
+        return entry;
+      });
+
+      await onConfirm(finalPayments, customerId);
     } finally {
       if (open) setLoading(false);
     }
   };
 
   const selectedIds = new Set(payments.map((p) => p.methodId));
+  const hasConta = payments.some(p => p.methodName.toLowerCase() === 'conta');
+  const contaAmount = payments.find(p => p.methodName.toLowerCase() === 'conta')?.amount || 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Finalizar Venda</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="rounded-lg bg-muted p-4 text-center">
-            <p className="text-sm text-muted-foreground">Total a pagar</p>
-            <p className="text-3xl font-bold text-primary">{formatCurrency(total)}</p>
+          <div className="rounded-lg bg-slate-100 p-4 text-center border">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total a pagar</p>
+            <p className="text-4xl font-black text-primary">{formatCurrency(total)}</p>
           </div>
 
           <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <User className="h-4 w-4" /> Cliente (Obrigatório para Conta)
+            <Label className="flex items-center gap-2 font-semibold">
+              <User className="h-4 w-4 text-primary" /> Cliente {hasConta && <span className="text-destructive font-bold">*</span>}
             </Label>
             <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger>
+              <SelectTrigger className="h-10 bg-white">
                 <SelectValue placeholder="Selecione um cliente..." />
               </SelectTrigger>
               <SelectContent>
@@ -140,74 +187,116 @@ export function CheckoutDialog({ open, onOpenChange, total, onConfirm }: Checkou
                 ))}
               </SelectContent>
             </Select>
+            {hasConta && !customerId && (
+              <p className="text-[10px] text-destructive font-medium uppercase">Obrigatório para venda a prazo</p>
+            )}
           </div>
 
-          <p className="text-sm font-medium">Formas de Pagamento</p>
-          <div className="grid md:grid-cols-3 gap-2">
-            {methods.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => addPayment(m.id)}
-                className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-3 transition-all text-xs ${selectedIds.has(m.id)
-                  ? "border-primary bg-primary/5 text-primary"
-                  : "border-border hover:border-primary/30"
-                  }`}
-              >
-                {iconMap[m.name] || defaultIcon}
-                <span className="font-medium">{m.name}</span>
-                {selectedIds.has(m.id) && <CheckCircle className="h-3.5 w-3.5" />}
-              </button>
-            ))}
+          <div className="space-y-3">
+            <p className="text-sm font-bold border-b pb-1">Formas de Pagamento</p>
+            <div className="grid grid-cols-3 gap-2">
+              {methods.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => addPayment(m.id)}
+                  className={`flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 transition-all text-[11px] ${selectedIds.has(m.id)
+                    ? "border-primary bg-primary/5 text-primary shadow-sm"
+                    : "border-slate-200 bg-white hover:border-primary/30"
+                    }`}
+                >
+                  {iconMap[m.name] || defaultIcon}
+                  <span className="font-bold">{m.name}</span>
+                  {selectedIds.has(m.id) && <CheckCircle className="h-3.5 w-3.5 absolute top-1 right-1" />}
+                </button>
+              ))}
+            </div>
           </div>
 
           {payments.length > 0 && (
             <div className="space-y-2">
               {payments.map((p) => (
-                <div key={p.methodId} className="flex items-center gap-2 rounded-lg border p-2">
-                  <span className="text-sm font-medium flex-1">{p.methodName}</span>
+                <div key={p.methodId} className="flex items-center gap-2 rounded-lg border bg-white p-2 shadow-sm">
+                  <span className="text-sm font-bold flex-1 text-slate-700">{p.methodName}</span>
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground">R$</span>
+                    <span className="text-xs font-bold text-slate-400">R$</span>
                     <Input
                       type="number"
                       step="0.01"
                       min="0"
                       value={p.amount || ""}
                       onChange={(e) => updateAmount(p.methodId, parseFloat(e.target.value) || 0)}
-                      className="w-24 h-8 text-right text-sm"
+                      className="w-28 h-9 text-right text-base font-bold"
+                      onFocus={(e) => e.target.select()}
                     />
                   </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removePayment(p.methodId)}>
-                    <X className="h-3.5 w-3.5" />
+                  <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:bg-destructive/5 shrink-0" onClick={() => removePayment(p.methodId)}>
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
               ))}
 
+              {hasConta && contaAmount > 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-3">
+                  <div className="flex items-center gap-2 text-primary font-bold text-sm">
+                    <CalendarDays className="h-4 w-4" /> Configurar Parcelamento
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-slate-500">Parcelas</Label>
+                      <Input 
+                        type="number" 
+                        min="1" 
+                        max="12" 
+                        value={numInstallments} 
+                        onChange={(e) => setNumInstallments(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="h-9 bg-white"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-slate-500">Intervalo (Dias)</Label>
+                      <Input 
+                        type="number" 
+                        min="1" 
+                        value={intervalDays} 
+                        onChange={(e) => setIntervalDays(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="h-9 bg-white"
+                      />
+                    </div>
+                  </div>
+                  {numInstallments > 1 && (
+                    <div className="text-xs font-medium text-primary bg-white p-2 rounded border border-primary/10">
+                      Serão geradas <span className="font-bold">{numInstallments} parcelas</span> de aproximadamente <span className="font-bold text-base">{formatCurrency(contaAmount / numInstallments)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {Math.abs(remaining) > 0.01 && (
-                <p className={`text-xs font-medium text-center ${remaining > 0 ? "text-destructive" : "text-warning"}`}>
-                  {remaining > 0 ? `Faltam ${formatCurrency(remaining)}` : `Excedente de ${formatCurrency(Math.abs(remaining))}`}
-                </p>
+                <div className={`p-2 rounded mt-2 text-center text-xs font-bold uppercase tracking-tight ${remaining > 0 ? "bg-destructive/10 text-destructive" : "bg-orange-100 text-orange-700"}`}>
+                  {remaining > 0 ? `Faltam ${formatCurrency(remaining)} para fechar o total` : `Excedente de ${formatCurrency(Math.abs(remaining))}`}
+                </div>
               )}
             </div>
           )}
 
           {methods.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-2">
-              Nenhuma forma de pagamento cadastrada. Configure em Configurações.
+            <p className="text-sm text-muted-foreground text-center py-4 bg-slate-50 rounded-lg border border-dashed">
+              Nenhuma forma de pagamento configurada.
             </p>
           )}
 
           <Button
-            className="w-full"
+            className="w-full h-12 text-base font-bold shadow-lg"
             size="lg"
             disabled={
               payments.length === 0 ||
               Math.abs(remaining) > 0.01 ||
               loading ||
-              (payments.some(p => p.methodName.toLowerCase() === 'conta') && (!customerId || customerId === 'none'))
+              (hasConta && (!customerId || customerId === 'none'))
             }
             onClick={handleConfirm}
           >
-            {loading ? "Processando..." : "Confirmar Pagamento"}
+            {loading ? "Processando..." : "Confirmar e Finalizar Venda"}
           </Button>
         </div>
       </DialogContent>

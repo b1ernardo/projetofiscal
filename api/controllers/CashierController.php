@@ -26,10 +26,11 @@ class CashierController extends ApiController {
         }
 
         $id = generateUUID();
-        $stmt = $this->conn->prepare("INSERT INTO cash_registers (id, company_id, opened_at, opening_balance, opened_by) VALUES (:id, :company_id, NOW(), :balance, :uid)");
+        $stmt = $this->conn->prepare("INSERT INTO cash_registers (id, company_id, opened_at, opening_balance, opened_by) VALUES (:id, :company_id, :opened_at, :balance, :uid)");
         $stmt->execute([
             ":id" => $id,
             ":company_id" => $this->company_id,
+            ":opened_at" => date('Y-m-d H:i:s'),
             ":balance" => $data->initial_balance ?? 0,
             ":uid" => $auth['id']
         ]);
@@ -47,10 +48,11 @@ class CashierController extends ApiController {
 
         $final_balance = $data->final_balance ?? $data->closing_balance ?? 0;
 
-        $stmt = $this->conn->prepare("UPDATE cash_registers SET closed_at = NOW(), closing_balance = :balance, closed_by = :uid WHERE id = :id AND company_id = :company_id");
+        $stmt = $this->conn->prepare("UPDATE cash_registers SET closed_at = :closed_at, closing_balance = :balance, closed_by = :uid WHERE id = :id AND company_id = :company_id");
         $stmt->execute([
             ":id" => $data->id,
             ":company_id" => $this->company_id,
+            ":closed_at" => date('Y-m-d H:i:s'),
             ":balance" => $final_balance,
             ":uid" => $auth['id']
         ]);
@@ -140,7 +142,7 @@ class CashierController extends ApiController {
 
         try {
             $id = generateUUID();
-            $stmt = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, type, amount, observation, created_by) VALUES (:id, :company_id, :rid, :type, :amount, :obs, :uid)");
+            $stmt = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, type, amount, observation, created_by, created_at) VALUES (:id, :company_id, :rid, :type, :amount, :obs, :uid, :created_at)");
             $stmt->execute([
                 ":id" => $id,
                 ":company_id" => $this->company_id,
@@ -148,7 +150,8 @@ class CashierController extends ApiController {
                 ":type" => $data->type,
                 ":amount" => $data->amount,
                 ":obs" => $data->description ?? "", // The field in JSON is description, in DB is observation
-                ":uid" => $auth['id']
+                ":uid" => $auth['id'],
+                ":created_at" => date('Y-m-d H:i:s')
             ]);
 
             $this->jsonResponse(["message" => "Movimentação registrada", "id" => $id], 201);

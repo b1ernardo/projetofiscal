@@ -54,6 +54,19 @@ class PaymentMethodsController extends ApiController {
             $params[":name"] = $data->name;
         }
 
+        // Prevent renaming if it's a fixed method
+        $stmt = $this->conn->prepare("SELECT name FROM payment_methods WHERE id = :id AND company_id = :company_id");
+        $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
+        $current = $stmt->fetch();
+        
+        $fixedMethods = ['Dinheiro', 'Conta'];
+        $isFixed = in_array($current['name'], $fixedMethods);
+
+        if ($isFixed && !empty($data->name) && $data->name !== $current['name']) {
+            $this->jsonResponse(["message" => "O nome de uma forma de pagamento fixa não pode ser alterado."], 403);
+            return;
+        }
+
         if (empty($updates)) {
             $this->jsonResponse(["message" => "Nenhum dado para atualizar"], 400);
             return;
@@ -68,6 +81,18 @@ class PaymentMethodsController extends ApiController {
 
     public function delete($id) {
         $this->authenticate();
+        
+        // Prevent deletion of fixed methods
+        $stmt = $this->conn->prepare("SELECT name FROM payment_methods WHERE id = :id AND company_id = :company_id");
+        $stmt->execute([':id' => $id, ':company_id' => $this->company_id]);
+        $current = $stmt->fetch();
+        
+        $fixedMethods = ['Dinheiro', 'Conta'];
+        if ($current && in_array($current['name'], $fixedMethods)) {
+            $this->jsonResponse(["message" => "Formas de pagamento fixas ('Dinheiro' ou 'Conta') não podem ser removidas."], 403);
+            return;
+        }
+
         try {
             $stmt = $this->conn->prepare("DELETE FROM payment_methods WHERE id = :id AND company_id = :company_id");
             $stmt->execute([":id" => $id, ":company_id" => $this->company_id]);

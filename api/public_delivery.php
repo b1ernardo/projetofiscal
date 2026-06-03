@@ -70,6 +70,16 @@ try {
             'delivery_fee' => 0
         ];
     }
+    
+    // Busca logo global do Fiscal caso exista
+    $fiscalStmt = $conn->prepare("SELECT logo_base64 FROM config_fiscal WHERE company_id = ? LIMIT 1");
+    $fiscalStmt->execute([$company_id]);
+    $fiscalCfg = $fiscalStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($fiscalCfg && !empty($fiscalCfg['logo_base64'])) {
+        // Se a empresa configurou um logo no FiscalConfig (Emitente), ele tem prioridade ou serve de fallback confiável
+        $settings['logo_url'] = $fiscalCfg['logo_base64'];
+    }
 
     $query = "SELECT p.id, p.name, '' as description, p.sale_price as price, p.photo_url as image, c.name as category 
               FROM products p 

@@ -3,8 +3,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Pencil, Trash2, MoreHorizontal, Package, Loader2, Tags, Copy } from "lucide-react";
-import { useState } from "react";
+import { Search, Plus, Pencil, Trash2, MoreHorizontal, Package, Loader2, Tags, Copy, FileSpreadsheet, Upload, Download } from "lucide-react";
+import { useState, useRef } from "react";
 import { CategoryManager } from "@/components/config/CategoryManager";
 import {
   DropdownMenu,
@@ -36,6 +36,7 @@ export default function Produtos() {
   const [isCloning, setIsCloning] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: products = [], isLoading } = useProducts();
   const saveProduct = useSaveProduct();
@@ -47,9 +48,262 @@ export default function Produtos() {
     (p.product_code?.toString() ?? "").includes(search)
   );
 
+
   const handleNew = () => {
     setEditProduct(null);
     setFormOpen(true);
+  };
+
+  const handleExportExcel = () => {
+    const headers = [
+      "Código",
+      "Produto",
+      "Categoria",
+      "Unidade",
+      "Custo",
+      "Preço Venda",
+      "Preço 2",
+      "Estoque Atual",
+      "Estoque Mínimo",
+      "NCM",
+      "CEST",
+      "Código Barras",
+      "CFOP Padrão",
+      "Origem",
+      "CST",
+      "CSOSN",
+      "CST PIS Ent.",
+      "CST PIS Saída",
+      "Aliq. PIS",
+      "Aliq. COFINS",
+      "CST IPI",
+      "Aliq. IPI"
+    ];
+
+    const data = filtered.map((p) => [
+      p.product_code || "",
+      (p.name || "").replace(/"/g, '""'),
+      (p.category_name || "—").replace(/"/g, '""'),
+      p.unit || "",
+      (p.cost_price || 0).toString().replace(".", ","),
+      (p.sale_price || 0).toString().replace(".", ","),
+      (p.sale_price2 || 0).toString().replace(".", ","),
+      p.stock_current || 0,
+      p.stock_min || 0,
+      p.ncm || "",
+      p.cest || "",
+      p.code || "",
+      p.cfop_padrao || "",
+      p.origem !== null && p.origem !== undefined ? p.origem.toString() : "0",
+      p.cst || "",
+      p.csosn || "",
+      p.pis_cst_entrada || "",
+      p.pis_cst_saida || "",
+      p.pis_aliquota ? p.pis_aliquota.toString().replace(".", ",") : "0",
+      p.cofins_aliquota ? p.cofins_aliquota.toString().replace(".", ",") : "0",
+      p.ipi_cst || "",
+      p.ipi_aliquota ? p.ipi_aliquota.toString().replace(".", ",") : "0"
+    ]);
+
+    const csvContent = [
+      headers.join(";"),
+      ...data.map((row) => row.map((cell) => `"${cell}"`).join(";")),
+    ].join("\r\n");
+
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `produtos_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("Planilha de Excel gerada com sucesso!");
+  };
+
+  const handleDownloadModelCSV = () => {
+    const headers = [
+      "Código",
+      "Produto",
+      "Categoria",
+      "Unidade",
+      "Custo",
+      "Preço Venda",
+      "Preço 2",
+      "Estoque Atual",
+      "Estoque Mínimo",
+      "NCM",
+      "CEST",
+      "Código Barras",
+      "CFOP Padrão",
+      "Origem",
+      "CST",
+      "CSOSN",
+      "CST PIS Ent.",
+      "CST PIS Saída",
+      "Aliq. PIS",
+      "Aliq. COFINS",
+      "CST IPI",
+      "Aliq. IPI"
+    ];
+
+    const data = [
+      ["1001", "Produto Exemplo 1", "Categoria A", "UN", "10,50", "20,00", "18,00", "50", "10", "12345678", "1234567", "7891234567890", "5102", "0", "00", "102", "07", "07", "0", "0", "53", "0"],
+      ["1002", "Produto Exemplo 2", "Categoria B", "CX", "25,00", "50,00", "45,00", "20", "5", "", "", "", "5102", "0", "00", "102", "07", "07", "0", "0", "53", "0"]
+    ];
+
+    const csvContent = [
+      headers.join(";"),
+      ...data.map((row) => row.map((cell) => `"${cell}"`).join(";")),
+    ].join("\r\n");
+
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "planilha_modelo_produtos.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("Planilha modelo baixada com sucesso!");
+  };
+
+  const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const text = e.target?.result as string;
+        if (!text) return;
+
+        // Prevent users from uploading .xlsx files that are binary ZIPs
+        if (text.startsWith("PK") || text.includes("xl/workbook.xml")) {
+          toast.error("Por favor, selecione um arquivo CSV separador por vírgulas válido e não um .xlsx (Excel).");
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+        }
+
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length < 2) {
+          toast.error("Arquivo inválido ou vazio.");
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        const parsedProducts = [];
+
+        const parseCurrency = (val: string | undefined): number => {
+          if (!val) return 0;
+          let clean = val.replace(/R\$\s?/g, '').trim();
+          if (clean.includes(',') && clean.includes('.')) {
+            clean = clean.replace(/\./g, '').replace(',', '.');
+          } else if (clean.includes(',')) {
+            clean = clean.replace(',', '.');
+          }
+          const num = parseFloat(clean);
+          return isNaN(num) ? 0 : num;
+        };
+
+        for (let i = 1; i < lines.length; i++) {
+          let row: string[] = [];
+          let inQuotes = false;
+          let currentCell = '';
+          for (const char of lines[i]) {
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ';' && !inQuotes) {
+              row.push(currentCell.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+              currentCell = '';
+            } else {
+              currentCell += char;
+            }
+          }
+          row.push(currentCell.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+
+          const product_code = parseInt(row[0]) || undefined;
+          const name = row[1] || `Produto ${i}`;
+          const category = row[2] === "—" ? "" : (row[2] || "");
+          const unit = row[3] || "UN";
+          const costPrice = parseCurrency(row[4]);
+          const salePrice = parseCurrency(row[5]);
+          const salePrice2 = parseCurrency(row[6]);
+          const stock = parseCurrency(row[7]);
+          const stockMin = parseCurrency(row[8]);
+          const ncm = row[9] || "";
+          const cest = row[10] || "";
+          const code = row[11] || "";
+          
+          // Fiscal columns
+          const cfop_padrao = row[12] || "";
+          const origem = row[13] ? parseInt(row[13]) : undefined;
+          const cst = row[14] || "";
+          const csosn = row[15] || "";
+          const pis_cst_entrada = row[16] || "";
+          const pis_cst_saida = row[17] || "";
+          const pis_aliquota = parseCurrency(row[18]);
+          const cofins_aliquota = parseCurrency(row[19]);
+          const ipi_cst = row[20] || "";
+          const ipi_aliquota = parseCurrency(row[21]);
+
+          const existingProduct = products.find(p => 
+            (product_code && p.product_code === product_code) || 
+            (code && p.code === code)
+          );
+
+          parsedProducts.push({
+            id: existingProduct?.id, // Will trigger PUT instead of POST
+            data: {
+              name, code, category, unit, costPrice, salePrice, salePrice2, stock, stockMin, ncm, cest,
+              productCode: product_code,
+              margin: costPrice > 0 ? parseFloat(((salePrice / costPrice - 1) * 100).toFixed(2)) : 0,
+              imageUrl: existingProduct?.photo_url || "", 
+              cfop_padrao: cfop_padrao || existingProduct?.cfop_padrao || "5102", 
+              origem: origem !== undefined ? origem : (existingProduct?.origem || 0), 
+              cst: cst || existingProduct?.cst || "00", 
+              csosn: csosn || existingProduct?.csosn || "102", 
+              pis_cst_entrada: pis_cst_entrada || existingProduct?.pis_cst_entrada || "07", 
+              pis_cst_saida: pis_cst_saida || existingProduct?.pis_cst_saida || "07", 
+              pis_aliquota: pis_aliquota || existingProduct?.pis_aliquota || 0, 
+              cofins_aliquota: cofins_aliquota || existingProduct?.cofins_aliquota || 0, 
+              ipi_cst: ipi_cst || existingProduct?.ipi_cst || "53", 
+              ipi_aliquota: ipi_aliquota || existingProduct?.ipi_aliquota || 0, 
+              boxConfigs: existingProduct?.boxConfigs || [], 
+              venda_delivery: existingProduct?.venda_delivery || false
+            }
+          });
+        }
+
+        toast.loading(`Importando ${parsedProducts.length} produtos...`, { id: "import-toast" });
+        
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (const p of parsedProducts) {
+          try {
+            await saveProduct.mutateAsync(p);
+            successCount++;
+          } catch (err) {
+            errorCount++;
+          }
+        }
+
+        if (errorCount === 0) {
+          toast.success(`Importação concluída: ${successCount} produtos salvos.`, { id: "import-toast" });
+        } else {
+          toast.warning(`Importação: ${successCount} salvos, ${errorCount} erros.`, { id: "import-toast" });
+        }
+
+      } catch (error) {
+        toast.error("Erro ao processar o arquivo.", { id: "import-toast" });
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file, "utf-8");
   };
 
   const handleEdit = (product: ProductWithBoxConfigs) => {
@@ -73,6 +327,7 @@ export default function Produtos() {
     productCode?: number;
     boxConfigs: BoxConfig[];
     venda_delivery: boolean;
+    subGroup?: string;
   }) => {
     saveProduct.mutate(
       { id: isCloning ? undefined : editProduct?.id, data },
@@ -126,6 +381,7 @@ export default function Produtos() {
     productCode: p.product_code ?? 0,
     boxConfigs: p.boxConfigs,
     venda_delivery: p.venda_delivery ?? false,
+    subGroup: p.sub_group ?? "",
   });
 
   return (
@@ -136,6 +392,35 @@ export default function Produtos() {
           <p className="text-muted-foreground">Gerencie o catálogo de produtos</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleDownloadModelCSV}
+            className="bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800 dark:hover:bg-zinc-800"
+          >
+            <Download className="mr-2 h-4 w-4" /> Baixar Modelo
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => fileInputRef.current?.click()} 
+            className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:text-blue-700 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900"
+          >
+            <Upload className="mr-2 h-4 w-4" /> Importar Planilha
+          </Button>
+          <input 
+            type="file" 
+            accept=".csv" 
+            ref={fileInputRef} 
+            className="hidden" 
+            onChange={handleImportCSV} 
+          />
+          <Button 
+            variant="outline" 
+            onClick={handleExportExcel} 
+            disabled={isLoading || filtered.length === 0}
+            className="bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900"
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar Planilha
+          </Button>
           <Button variant="outline" onClick={() => setCategoryManagerOpen(true)}>
             <Tags className="mr-2 h-4 w-4" /> Categorias
           </Button>

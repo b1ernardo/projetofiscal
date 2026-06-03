@@ -7,6 +7,7 @@ import RelatorioVendasProduto from "./relatorios/RelatorioVendasProduto";
 import RelatorioVendasClientes from "./relatorios/RelatorioVendasClientes";
 import RelatorioLucratividade from "./relatorios/RelatorioLucratividade";
 import RelatorioVendedores from "./relatorios/RelatorioVendedores";
+import RelatorioPlanoContas from "./relatorios/RelatorioPlanoContas";
 
 // Relatório de Vendedores
 export default function Relatorios() {
@@ -32,6 +33,7 @@ export default function Relatorios() {
       {tab === "vendas-clientes" && <RelatorioVendasClientes />}
       {tab === "lucratividade" && <RelatorioLucratividade />}
       {tab === "vendas-vendedor" && <RelatorioVendedores />}
+      {tab === "plano-contas" && <RelatorioPlanoContas />}
     </div>
   );
 }

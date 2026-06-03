@@ -8,7 +8,7 @@ class UsersController extends ApiController {
     public function list() {
         $this->authenticate();
         
-        $query = "SELECT u.id, u.email, u.created_at, p.full_name, p.phone, p.avatar_url 
+        $query = "SELECT u.id, u.email, u.created_at, u.max_discount, p.full_name, p.phone, p.avatar_url 
                   FROM users u 
                   LEFT JOIN profiles p ON u.id = p.user_id 
                   WHERE u.company_id = :cid
@@ -45,12 +45,14 @@ class UsersController extends ApiController {
             $this->conn->beginTransaction();
 
             $userId = generateUUID();
-            $stmt = $this->conn->prepare("INSERT INTO users (id, email, password_hash, company_id) VALUES (:id, :email, :password, :cid)");
+            $max_discount = isset($data->max_discount) ? (float)$data->max_discount : 100.00;
+            $stmt = $this->conn->prepare("INSERT INTO users (id, email, password_hash, company_id, max_discount) VALUES (:id, :email, :password, :cid, :max_discount)");
             $stmt->execute([
                 ":id" => $userId,
                 ":email" => $data->email,
                 ":password" => password_hash($data->password, PASSWORD_DEFAULT),
-                ":cid" => $this->company_id
+                ":cid" => $this->company_id,
+                ":max_discount" => $max_discount
             ]);
 
             $profileId = generateUUID();
@@ -93,10 +95,15 @@ class UsersController extends ApiController {
         try {
             $this->conn->beginTransaction();
 
-            // Update user email
             if (!empty($data->email)) {
                 $stmt = $this->conn->prepare("UPDATE users SET email = :email WHERE id = :id AND company_id = :cid");
                 $stmt->execute([":email" => $data->email, ":id" => $id, ":cid" => $this->company_id]);
+            }
+
+            // Update max_discount
+            if (isset($data->max_discount)) {
+                $stmt = $this->conn->prepare("UPDATE users SET max_discount = :max_discount WHERE id = :id AND company_id = :cid");
+                $stmt->execute([":max_discount" => (float)$data->max_discount, ":id" => $id, ":cid" => $this->company_id]);
             }
 
             // Update password if provided

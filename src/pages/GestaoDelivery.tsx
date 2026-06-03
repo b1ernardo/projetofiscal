@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-    Bike, CheckCircle2, Clock, MapPin, Phone, User, ChefHat, LayoutGrid, XCircle, Search, PlusCircle, Printer, RefreshCw, MessageSquare, ExternalLink, ChevronDown, ChevronUp, Check, X, Volume2, VolumeX
+    Bike, CheckCircle2, Clock, MapPin, Phone, User, ChefHat, LayoutGrid, XCircle, Search, PlusCircle, Printer, RefreshCw, MessageSquare, ExternalLink, ChevronDown, ChevronUp, Check, X, Volume2, VolumeX, FileText
 } from "lucide-react";
 
 import { useDeliveryOrders, useUpdateDeliveryOrderStatus, DeliveryOrder } from "@/hooks/useDeliveryOrders";
@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ManualDeliveryDialog } from "@/components/delivery/ManualDeliveryDialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { printDeliveryA4, type DeliveryData } from "@/utils/printReceipt";
 
 export default function GestaoDelivery() {
     const [activeTab, setActiveTab] = useState("pedidos");
@@ -74,8 +75,8 @@ export default function GestaoDelivery() {
         if (searchQuery) {
             const lower = searchQuery.toLowerCase();
             filtered = filtered.filter(o =>
-                o.customer_name.toLowerCase().includes(lower) ||
-                o.id.toLowerCase().includes(lower) ||
+                (o.customer_name?.toLowerCase().includes(lower) || false) ||
+                (o.id?.toLowerCase().includes(lower) || false) ||
                 (o.customer_phone && o.customer_phone.includes(lower))
             );
         }
@@ -402,8 +403,28 @@ function OrderCard({ order, theme, onUpdateStatus, isExpanded, onToggleExpand, o
                     <button className="w-7 h-7 bg-[#3498db] rounded-md flex items-center justify-center hover:scale-110 transition-transform shadow" title="Abrir Link">
                         <ExternalLink className="w-4 h-4 text-white" />
                     </button>
-                    <button className="w-7 h-7 bg-gray-500 rounded-md flex items-center justify-center hover:scale-110 transition-transform shadow" title="Imprimir Comanda">
-                        <Printer className="w-4 h-4 text-white" />
+                    <button
+                        onClick={() => {
+                            const data: DeliveryData = {
+                                orderNumber: order.id,
+                                customerName: order.customer_name,
+                                customerPhone: order.customer_phone,
+                                address: order.delivery_address || "Retirada no Balcão",
+                                type: order.order_type,
+                                paymentMethod: order.payment_method,
+                                items: order.items || [],
+                                subtotal: Number(order.subtotal),
+                                deliveryFee: Number(order.delivery_fee),
+                                total: Number(order.total),
+                                changeFor: order.change_for ? Number(order.change_for) : undefined,
+                                date: new Date(order.created_at)
+                            };
+                            printDeliveryA4(data);
+                        }}
+                        className="w-7 h-7 bg-orange-500 rounded-md flex items-center justify-center hover:scale-110 transition-transform shadow"
+                        title="Imprimir A4"
+                    >
+                        <FileText className="w-4 h-4 text-white" />
                     </button>
                 </div>
                 {order.status !== 'entregue' && (

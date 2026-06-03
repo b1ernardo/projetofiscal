@@ -8,8 +8,11 @@ interface RequestOptions extends RequestInit {
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const isFormData = options.body instanceof FormData;
 
+  const token = localStorage.getItem('auth_token');
+
   const headers = {
     ...(!isFormData && { 'Content-Type': 'application/json' }),
+    ...(token && { 'Authorization': `Bearer ${token}` }),
     ...options.headers,
   };
 
@@ -28,7 +31,8 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
+    const errorMessage = errorData.message || errorData.error || `Error ${response.status}: ${response.statusText}`;
+    throw new Error(errorMessage);
   }
 
   // Handle empty responses (like 204 No Content)

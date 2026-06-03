@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ShoppingCart, Plus, Minus, Trash2, Pause, Percent } from "lucide-react";
+import { toast } from "sonner";
 
 interface CartItem {
   id: string;
@@ -24,6 +25,7 @@ interface CartPanelProps {
   onCheckout: () => void;
   onSaveToComanda: () => void;
   asCard?: boolean;
+  maxDiscount?: number;
 }
 
 export function CartPanel({
@@ -38,6 +40,7 @@ export function CartPanel({
   onCheckout,
   onSaveToComanda,
   asCard = true,
+  maxDiscount = 100,
 }: CartPanelProps) {
   const [discountType, setDiscountType] = useState<"percent" | "value">("percent");
 
@@ -102,7 +105,15 @@ export function CartPanel({
                 min="0"
                 step="0.01"
                 value={discount || ""}
-                onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 0;
+                  const perc = discountType === "percent" ? val : (subtotal > 0 ? (val / subtotal) * 100 : 0);
+                  if (maxDiscount !== undefined && perc > maxDiscount) {
+                    toast.error(`Seu limite de desconto é ${maxDiscount}%`);
+                    return;
+                  }
+                  onDiscountChange(val);
+                }}
                 placeholder="Desconto"
                 className="h-8 text-sm"
               />

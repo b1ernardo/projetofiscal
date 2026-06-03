@@ -317,7 +317,12 @@ export function ComandaDetailDialog({ open, onOpenChange, comandaId }) {
                 onOpenChange={setReceiptOptionsOpen}
                 onEmitNFCe={() => {
                     if (lastSaleData?.saleId) {
-                        emitFiscal.mutate({ saleId: lastSaleData.saleId, model: '65' });
+                        const promise = emitFiscal.mutateAsync({ saleId: lastSaleData.saleId, model: '65' });
+                        toast.promise(promise, {
+                            loading: "Transmitindo NFC-e para a SEFAZ...",
+                            success: (data) => data.message || "NFC-e autorizada com sucesso!",
+                            error: (err) => err.message || "Erro ao emitir NFC-e"
+                        });
                     }
                     setReceiptOptionsOpen(false);
                     onOpenChange(false);

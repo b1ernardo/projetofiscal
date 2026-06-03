@@ -170,15 +170,19 @@ export function PaymentMethodManager() {
                       </Button>
                     ) : (
                       <div className="flex">
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground p-0" onClick={() => {
-                          setEditingId(m.id);
-                          setEditingName(m.name);
-                        }}>
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive p-0" onClick={() => deleteMethod(m.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {m.name !== "Dinheiro" && m.name !== "Conta" && (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground p-0" onClick={() => {
+                              setEditingId(m.id);
+                              setEditingName(m.name);
+                            }}>
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive p-0" onClick={() => deleteMethod(m.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

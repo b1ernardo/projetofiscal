@@ -11,167 +11,209 @@ class AuthController {
         $this->conn = $database->getConnection();
     }
 
-    public function login() {
+    private function getUserContext($userRow) {
+        $userId = $userRow['id'];
+        $companyId = $userRow['company_id'] ?? '1';
+
+        // 1. Fetch Roles
+        $roles = ["operador_caixa"]; // Default role
         try {
-            // Recebe o corpo da requisição (JSON vindo do React)
-            $data = json_decode(file_get_contents("php://input"));
+            $stmtRole = $this->conn->prepare("SELECT role FROM user_roles WHERE user_id = ?");
+            $stmtRole->execute([$userId]);
+            $fetchedRoles = $stmtRole->fetchAll(PDO::FETCH_COLUMN);
+            if (!empty($fetchedRoles)) {
+                $roles = $fetchedRoles;
+            }
+        } catch (Exception $e) { }
+
+        // 2. Fetch Profile Info
+        $profileName = explode('@', $userRow['email'])[0];
+        try {
+            $stmtProfile = $this->conn->prepare("SELECT full_name FROM profiles WHERE user_id = ?");
+            $stmtProfile->execute([$userId]);
+            if ($p = $stmtProfile->fetch(PDO::FETCH_ASSOC)) {
+                if (!empty($p['full_name'])) $profileName = $p['full_name'];
+            }
+        } catch (Exception $e) { }
+
+        // 3. Fetch Specific Permissions
+        $permissions = [];
+        try {
+            $stmtPerm = $this->conn->prepare("SELECT module_key FROM user_module_permissions WHERE user_id = ?");
+            $stmtPerm->execute([$userId]);
+            $permissions = $stmtPerm->fetchAll(PDO::FETCH_COLUMN);
+        } catch (Exception $e) { }
+
+        // 4. Fetch Company Modules
+        $companyModules = [];
+        try {
+            $stmtModules = $this->conn->prepare("SELECT modules FROM companies WHERE id = ?");
+            $stmtModules->execute([$companyId]);
+            $modulesJson = $stmtModules->fetchColumn();
+            if ($modulesJson) {
+                $companyModules = json_decode($modulesJson, true) ?: [];
+            }
+        } catch (Exception $e) { }
+
+        // Fallback safety
+        if (empty($companyModules)) {
+            $companyModules = ["pdv", "vendas", "produtos", "dashboard", "configuracoes", "fiscal", "delivery"];
+        }
+
+        return [
+            "id" => $userId,
+            "email" => $userRow['email'],
+            "company_id" => $companyId,
+            "roles" => $roles,
+            "permissions" => $permissions,
+            "profile" => ["full_name" => $profileName],
+            "company_modules" => $companyModules,
+            "max_discount" => (float)($userRow['max_discount'] ?? 100.0)
+        ];
+    }
+
+    public function login() {
+        ob_start();
+        header('Content-Type: application/json');
+        try {
+            // Recebe o corpo da requisição
+            $json = file_get_contents("php://input");
+            $data = json_decode($json);
 
             if (!empty($data->email) && !empty($data->password)) {
                 $email = htmlspecialchars(strip_tags($data->email));
-                $password = $data->password; 
                 
-                // Busca o usuário pelo email
-                $query = "SELECT id, email, password_hash, company_id FROM users WHERE email = :email LIMIT 1";
+                // Busca básica do usuário
+                $query = "SELECT id, email, password_hash, company_id, max_discount FROM users WHERE email = :email LIMIT 1";
                 $stmt = $this->conn->prepare($query);
-                $stmt->bindParam(":email", $email);
-                $stmt->execute();
+                $stmt->execute([':email' => $email]);
                 
                 if ($stmt->rowCount() > 0) {
                     $row = $stmt->fetch(PDO::FETCH_ASSOC);
                     
-                    $password_matched = password_verify($password, $row['password_hash']) || $row['password_hash'] === $password;
+                    // Verifica senha (suporta texto puro ou hash para facilitar migração)
+                    $password_matched = password_verify($data->password, $row['password_hash']) || ($data->password === $row['password_hash']);
 
                     if ($password_matched) {
-                        // Busca Papéis e Permissões de Módulo
-                        $role_query = "SELECT role FROM user_roles WHERE user_id = :id AND company_id = :cid";
-                        $role_stmt = $this->conn->prepare($role_query);
-                        $role_stmt->bindParam(":id", $row['id']);
-                        $role_stmt->bindParam(":cid", $row['company_id']);
-                        $role_stmt->execute();
-                        $roles = $role_stmt->fetchAll(PDO::FETCH_COLUMN);
-
-                        $perm_query = "SELECT module_key FROM user_module_permissions WHERE user_id = :id AND company_id = :cid";
-                        $perm_stmt = $this->conn->prepare($perm_query);
-                        $perm_stmt->bindParam(":id", $row['id']);
-                        $perm_stmt->bindParam(":cid", $row['company_id']);
-                        $perm_stmt->execute();
-                        $permissions = $perm_stmt->fetchAll(PDO::FETCH_COLUMN);
-                        
-                        // Busca Perfil
-                        $profile_query = "SELECT full_name, phone, avatar_url FROM profiles WHERE user_id = :id AND company_id = :cid LIMIT 1";
-                        $profile_stmt = $this->conn->prepare($profile_query);
-                        $profile_stmt->bindParam(":id", $row['id']);
-                        $profile_stmt->bindParam(":cid", $row['company_id']);
-                        $profile_stmt->execute();
-                        $profile = $profile_stmt->fetch(PDO::FETCH_ASSOC);
-
-                        // Busca Módulos da Empresa
-                        $modules_query = "SELECT modules FROM companies WHERE id = :cid LIMIT 1";
-                        $modules_stmt = $this->conn->prepare($modules_query);
-                        $modules_stmt->bindParam(":cid", $row['company_id']);
-                        $modules_stmt->execute();
-                        $company_modules_raw = $modules_stmt->fetchColumn();
-                        $company_modules = $company_modules_raw ? json_decode($company_modules_raw) : [];
-
+                        // Gera um token simples base64 (substituir por JWT em produção se necessário)
                         $token = base64_encode(json_encode([
                             "id" => $row['id'],
                             "email" => $row['email'],
-                            "company_id" => $row['company_id'],
+                            "company_id" => $row['company_id'] ?? '1',
                             "exp" => time() + (86400 * 7)
                         ]));
 
-                        http_response_code(200);
+                        $userContext = $this->getUserContext($row);
+
+                        ob_clean();
                         echo json_encode([
                             "message" => "Login successful",
                             "token" => $token,
-                            "user" => [
-                                "id" => $row['id'],
-                                "email" => $row['email'],
-                                "company_id" => $row['company_id'],
-                                "roles" => $roles,
-                                "permissions" => $permissions,
-                                "profile" => $profile,
-                                "company_modules" => $company_modules
-                            ]
+                            "user" => $userContext
                         ]);
-                    } else {
-                        http_response_code(401);
-                        echo json_encode(["message" => "Invalid credentials", "error" => "invalid_password"]);
+                        return;
                     }
-                } else {
-                    http_response_code(404);
-                    echo json_encode(["message" => "User not found", "error" => "user_not_found"]);
                 }
+                
+                http_response_code(401);
+                echo json_encode(["message" => "Email ou senha incorretos"]);
             } else {
                 http_response_code(400);
-                echo json_encode(["message" => "Incomplete data", "error" => "missing_fields"]);
+                echo json_encode(["message" => "Dados incompletos"]);
             }
         } catch (Exception $e) {
             http_response_code(500);
-            echo json_encode(["message" => "Internal Error", "error" => $e->getMessage()]);
+            echo json_encode(["message" => "Erro Interno no Servidor", "error" => $e->getMessage()]);
         }
     }
 
     public function me() {
+        ob_start();
+        header('Content-Type: application/json');
         try {
-            // Usa o cabeçalho normalizado no index.php
-            $token = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
+            // Pega o token do cabeçalho
+            $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+            
+            // Fallback for apache_request_headers
+            if (!$authHeader && function_exists('apache_request_headers')) {
+                $headers = apache_request_headers();
+                $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+            }
+            
+            $token = str_replace('Bearer ', '', $authHeader);
 
             if ($token) {
-                $tokenParts = explode(" ", $token);
-                if (count($tokenParts) == 2 && $tokenParts[0] == "Bearer") {
-                    $payload = json_decode(base64_decode($tokenParts[1]), true);
-                    if ($payload && isset($payload['id'])) {
-                        
-                        // Busca dados
-                        $query = "SELECT id, email, company_id FROM users WHERE id = :id";
-                        $stmt = $this->conn->prepare($query);
-                        $stmt->bindParam(":id", $payload['id']);
-                        $stmt->execute();
-                        
-                        if ($stmt->rowCount() > 0) {
-                            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-                            
-                            // Busca papéis (roles) e permissões
-                            $role_query = "SELECT role FROM user_roles WHERE user_id = :id AND company_id = :cid";
-                            $role_stmt = $this->conn->prepare($role_query);
-                            $role_stmt->bindParam(":id", $user['id']);
-                            $role_stmt->bindParam(":cid", $user['company_id']);
-                            $role_stmt->execute();
-                            $roles = $role_stmt->fetchAll(PDO::FETCH_COLUMN);
-
-                            $perm_query = "SELECT module_key FROM user_module_permissions WHERE user_id = :id AND company_id = :cid";
-                            $perm_stmt = $this->conn->prepare($perm_query);
-                            $perm_stmt->bindParam(":id", $user['id']);
-                            $perm_stmt->bindParam(":cid", $user['company_id']);
-                            $perm_stmt->execute();
-                            $permissions = $perm_stmt->fetchAll(PDO::FETCH_COLUMN);
-                            
-                            // Busca Perfil
-                            $profile_query = "SELECT full_name, phone, avatar_url FROM profiles WHERE user_id = :id AND company_id = :cid LIMIT 1";
-                            $profile_stmt = $this->conn->prepare($profile_query);
-                            $profile_stmt->bindParam(":id", $user['id']);
-                            $profile_stmt->bindParam(":cid", $user['company_id']);
-                            $profile_stmt->execute();
-                            $profile = $profile_stmt->fetch(PDO::FETCH_ASSOC);
-
-                            // Busca Módulos da Empresa
-                            $modules_query = "SELECT modules FROM companies WHERE id = :cid LIMIT 1";
-                            $modules_stmt = $this->conn->prepare($modules_query);
-                            $modules_stmt->bindParam(":cid", $user['company_id']);
-                            $modules_stmt->execute();
-                            $company_modules_raw = $modules_stmt->fetchColumn();
-                            $company_modules = $company_modules_raw ? json_decode($company_modules_raw) : [];
-
-                            $user['roles'] = $roles;
-                            $user['permissions'] = $permissions;
-                            $user['profile'] = $profile;
-                            $user['company_modules'] = $company_modules;
-
-                            http_response_code(200);
-                            echo json_encode(["user" => $user]);
-                            return;
-                        }
+                $payload = json_decode(base64_decode($token), true);
+                
+                if ($payload && isset($payload['id'])) {
+                    // Revalidate against DB to get fresh roles
+                    $stmt = $this->conn->prepare("SELECT id, email, company_id, max_discount FROM users WHERE id = ?");
+                    $stmt->execute([$payload['id']]);
+                    if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                        $userContext = $this->getUserContext($row);
+                        ob_clean();
+                        echo json_encode(["user" => $userContext]);
+                        return;
                     }
                 }
             }
             
+            ob_clean();
             http_response_code(401);
-            echo json_encode(["user" => null, "message" => "Unauthorized"]);
-            return;
+            echo json_encode(["user" => null, "message" => "Sessão inválida"]);
+        } catch (Exception $e) {
+            ob_clean();
+            http_response_code(500);
+            echo json_encode(["message" => "Erro ao processar sessão", "error" => $e->getMessage()]);
+        }
+    }
+    public function verifyAdmin() {
+        ob_start();
+        header('Content-Type: application/json');
+        try {
+            $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+            $token = str_replace('Bearer ', '', $authHeader);
+            if (!$token) {
+                http_response_code(401);
+                echo json_encode(["message" => "Unauthorized"]);
+                return;
+            }
+            $payload = json_decode(base64_decode($token), true);
+            $companyId = $payload['company_id'] ?? '1';
+
+            $json = file_get_contents("php://input");
+            $data = json_decode($json);
+
+            if (empty($data->password)) {
+                http_response_code(400);
+                echo json_encode(["message" => "Senha obrigatória"]);
+                return;
+            }
+
+            $query = "
+                SELECT u.password_hash 
+                FROM users u
+                JOIN user_roles ur ON u.id = ur.user_id
+                WHERE u.company_id = :company_id 
+                  AND (ur.role = 'admin' OR ur.role = 'super_admin')
+            ";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([':company_id' => $companyId]);
+            $admins = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($admins as $admin) {
+                if (password_verify($data->password, $admin['password_hash']) || ($data->password === $admin['password_hash'])) {
+                    ob_clean();
+                    echo json_encode(["message" => "Admin verified"]);
+                    return;
+                }
+            }
+
+            http_response_code(401);
+            echo json_encode(["message" => "Senha de administrador incorreta"]);
         } catch (Exception $e) {
             http_response_code(500);
-            echo json_encode(["message" => "Internal Error", "error" => $e->getMessage()]);
+            echo json_encode(["message" => "Erro Interno", "error" => $e->getMessage()]);
         }
     }
 }

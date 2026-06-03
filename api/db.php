@@ -19,11 +19,15 @@ class Database {
             // Instância do PDO
             $this->conn = new PDO($dsn, $this->username, $this->password);
             
-            // Configurações de erro do PDO (Exceptions) e formato padrão do retorno
             $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $this->conn->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
             
+            // Força o fuso horário do banco de dados para o Brasil
+            $this->conn->exec("SET time_zone = '-03:00'");
+            
         } catch(PDOException $exception) {
+            if (ob_get_length()) ob_clean();
+            header("Content-Type: application/json");
             echo json_encode(["error" => "Connection error: " . $exception->getMessage()]);
             exit;
         }

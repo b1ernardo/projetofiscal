@@ -3,10 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DollarSign, Loader2, Target } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
+import { useCategories } from "@/hooks/useCategories";
+import { useSubCategories } from "@/hooks/useSubCategories";
 
 const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -15,14 +18,22 @@ export default function RelatorioLucratividade() {
     const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
     const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
     const [searchTerm, setSearchTerm] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("__all__");
+    const [subCategoryFilter, setSubCategoryFilter] = useState("__all__");
+
+    const { data: categories = [] } = useCategories();
+    const { data: allSubCategories = [] } = useSubCategories();
+
+    const selectedCategory = categories.find((c) => c.name === categoryFilter);
+    const filteredSubCats = selectedCategory
+        ? allSubCategories.filter((s) => s.category_id === selectedCategory.id)
+        : [];
 
     const { data: profitabilityData = [], isLoading } = useQuery({
         queryKey: ["report-profitability", startDate, endDate],
         queryFn: async () => {
             const response = await fetch(`${import.meta.env.VITE_API_URL}/reports/profitability?start=${startDate}&end=${endDate}`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                }
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
             });
             if (!response.ok) throw new Error('Falha ao carregar relatório');
             const data = await response.json();
@@ -31,6 +42,7 @@ export default function RelatorioLucratividade() {
                 code: p.code,
                 name: p.name,
                 category: p.category ?? "—",
+                subGroup: p.sub_group ?? "",
                 qty: parseFloat(p.total_qty) || 0,
                 revenue: parseFloat(p.total_revenue) || 0,
                 cost: parseFloat(p.total_cost) || 0,
@@ -39,14 +51,25 @@ export default function RelatorioLucratividade() {
         },
     });
 
-    const filteredData = profitabilityData.filter((item: any) =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.code && item.code.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    const filteredData = profitabilityData.filter((item: any) => {
+        if (categoryFilter !== "__all__" && item.category !== categoryFilter) return false;
+        if (subCategoryFilter !== "__all__" && item.subGroup !== subCategoryFilter) return false;
+        if (searchTerm) {
+            const q = searchTerm.toLowerCase();
+            if (!item.name.toLowerCase().includes(q) &&
+                !(item.code && item.code.toLowerCase().includes(q))) return false;
+        }
+        return true;
+    });
 
     const globalRevenue = filteredData.reduce((acc: number, item: any) => acc + item.revenue, 0);
     const globalProfit = filteredData.reduce((acc: number, item: any) => acc + item.profit, 0);
     const globalMargin = globalRevenue > 0 ? (globalProfit / globalRevenue) * 100 : 0;
+
+    const handleCategoryChange = (val: string) => {
+        setCategoryFilter(val);
+        setSubCategoryFilter("__all__");
+    };
 
     return (
         <div className="space-y-6">
@@ -65,7 +88,37 @@ export default function RelatorioLucratividade() {
                         <Label className="text-xs">Data Fim</Label>
                         <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
                     </div>
-                    <div className="space-y-1 flex-1 min-w-[200px]">
+                    <div className="space-y-1 w-44">
+                        <Label className="text-xs">Categoria</Label>
+                        <Select value={categoryFilter} onValueChange={handleCategoryChange}>
+                            <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">Todas as categorias</SelectItem>
+                                {categories.map((c) => (
+                                    <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1 w-44">
+                        <Label className="text-xs">Sub-categoria</Label>
+                        <Select
+                            value={subCategoryFilter}
+                            onValueChange={setSubCategoryFilter}
+                            disabled={filteredSubCats.length === 0}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder={filteredSubCats.length === 0 ? "—" : "Todas"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">Todas</SelectItem>
+                                {filteredSubCats.map((s) => (
+                                    <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1 flex-1 min-w-[180px]">
                         <Label className="text-xs">Buscar Produto</Label>
                         <Input
                             type="text"
@@ -121,6 +174,7 @@ export default function RelatorioLucratividade() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Produto</TableHead>
+                                    <TableHead>Categoria / Sub-cat.</TableHead>
                                     <TableHead className="text-right">Qtd Vendida</TableHead>
                                     <TableHead className="text-right">Custo Somado</TableHead>
                                     <TableHead className="text-right">Valor Venda</TableHead>
@@ -136,6 +190,14 @@ export default function RelatorioLucratividade() {
                                             <TableCell className="font-medium">
                                                 <div>{p.name}</div>
                                                 <div className="text-xs text-muted-foreground">{p.code}</div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col gap-1">
+                                                    <Badge variant="outline" className="w-fit">{p.category}</Badge>
+                                                    {p.subGroup && (
+                                                        <Badge variant="secondary" className="w-fit">{p.subGroup}</Badge>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-right">{p.qty}</TableCell>
                                             <TableCell className="text-right text-muted-foreground">{formatCurrency(p.cost)}</TableCell>

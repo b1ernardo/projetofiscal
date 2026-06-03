@@ -33,17 +33,6 @@ export function useFiscal() {
 
             return data;
         },
-        onSuccess: (data) => {
-            toast.success(data.message || "Nota fiscal emitida com sucesso!", {
-                action: data.noteId ? {
-                    label: "Ver DANFE",
-                    onClick: () => window.open(`${import.meta.env.VITE_API_URL}/fiscal/danfe/${data.noteId}`, '_blank')
-                } : undefined
-            });
-        },
-        onError: (error: any) => {
-            toast.error(error.message);
-        }
     });
 }
 

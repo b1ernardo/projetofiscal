@@ -28,8 +28,8 @@ class FinancesController extends ApiController {
         }
 
         $id = bin2hex(random_bytes(18));
-        $query = "INSERT INTO accounts_payable (id, company_id, description, supplier_id, amount, due_date, status, payment_date, category, payment_method) 
-                  VALUES (:id, :company_id, :description, :supplier_id, :amount, :due_date, :status, :payment_date, :category, :payment_method)";
+        $query = "INSERT INTO accounts_payable (id, company_id, description, supplier_id, amount, due_date, status, payment_date, category, payment_method_id) 
+                  VALUES (:id, :company_id, :description, :supplier_id, :amount, :due_date, :status, :payment_date, :category, :payment_method_id)";
         
         $stmt = $this->conn->prepare($query);
         $stmt->execute([
@@ -42,7 +42,7 @@ class FinancesController extends ApiController {
             ':status' => $data->status ?? 'pending',
             ':payment_date' => $data->payment_date ?? null,
             ':category' => $data->category ?? 'Geral',
-            ':payment_method' => $data->payment_method ?? null
+            ':payment_method_id' => $data->payment_method_id ?? $data->payment_method ?? null
         ]);
 
         $this->jsonResponse(["message" => "Account payable created", "id" => $id], 201);
@@ -65,7 +65,7 @@ class FinancesController extends ApiController {
                   status = :status,
                   payment_date = :payment_date,
                   category = :category,
-                  payment_method = :payment_method
+                  payment_method_id = :payment_method_id
                   WHERE id = :id AND company_id = :company_id";
         
         $stmt = $this->conn->prepare($query);
@@ -80,7 +80,7 @@ class FinancesController extends ApiController {
                 ':status' => $data->status,
                 ':payment_date' => $data->payment_date ?? null,
                 ':category' => $data->category ?? 'Geral',
-                ':payment_method' => $data->payment_method ?? null
+                ':payment_method_id' => $data->payment_method_id ?? $data->payment_method ?? null
             ]);
 
             // If it was pending and is now paid, create cash movement (negative)
@@ -91,15 +91,16 @@ class FinancesController extends ApiController {
 
                 if ($register) {
                     require_once __DIR__ . '/../utils.php';
-                    $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by) 
-                                                      VALUES (:move_id, :company_id, :reg_id, :amount, 'saida', :obs, :uid)");
+                    $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by, created_at) 
+                                                      VALUES (:move_id, :company_id, :reg_id, :amount, 'sangria', :obs, :uid, :now)");
                     $stmtMove->execute([
                         ":move_id" => generateUUID(),
                         ":company_id" => $this->company_id,
                         ":reg_id" => $register['id'],
-                        ":amount" => -$data->amount,
-                        ":obs" => "Pagamento: {$data->description}" . ($data->payment_method ? " ({$data->payment_method})" : ""),
-                        ":uid" => $user['id']
+                        ":amount" => abs($data->amount),
+                        ":obs" => "Pagamento CP: {$data->description}" . (($data->payment_method_id ?? $data->payment_method ?? '') ? " (" . ($data->payment_method_id ?? $data->payment_method) . ")" : ""),
+                        ":uid" => $user['id'],
+                        ":now" => date('Y-m-d H:i:s')
                     ]);
                 }
             }
@@ -144,8 +145,8 @@ class FinancesController extends ApiController {
         }
 
         $id = bin2hex(random_bytes(18));
-        $query = "INSERT INTO accounts_receivable (id, company_id, description, customer_id, amount, due_date, status, payment_date, category, payment_method) 
-                  VALUES (:id, :company_id, :description, :customer_id, :amount, :due_date, :status, :payment_date, :category, :payment_method)";
+        $query = "INSERT INTO accounts_receivable (id, company_id, description, customer_id, amount, due_date, status, payment_date, category, payment_method_id) 
+                  VALUES (:id, :company_id, :description, :customer_id, :amount, :due_date, :status, :payment_date, :category, :payment_method_id)";
         
         $stmt = $this->conn->prepare($query);
         $stmt->execute([
@@ -158,7 +159,7 @@ class FinancesController extends ApiController {
             ':status' => $data->status ?? 'pending',
             ':payment_date' => $data->payment_date ?? null,
             ':category' => $data->category ?? 'Geral',
-            ':payment_method' => $data->payment_method ?? null
+            ':payment_method_id' => $data->payment_method_id ?? $data->payment_method ?? null
         ]);
 
         $this->jsonResponse(["message" => "Account receivable created", "id" => $id], 201);
@@ -181,7 +182,7 @@ class FinancesController extends ApiController {
                   status = :status,
                   payment_date = :payment_date,
                   category = :category,
-                  payment_method = :payment_method
+                  payment_method_id = :payment_method_id
                   WHERE id = :id AND company_id = :company_id";
         
         $stmt = $this->conn->prepare($query);
@@ -195,7 +196,7 @@ class FinancesController extends ApiController {
             ':status' => $data->status,
             ':payment_date' => $data->payment_date ?? null,
             ':category' => $data->category ?? 'Geral',
-            ':payment_method' => $data->payment_method ?? null
+            ':payment_method_id' => $data->payment_method_id ?? $data->payment_method ?? null
         ]);
 
         // If it was pending/overdue and is now paid, create cash movement (positive)
@@ -206,15 +207,16 @@ class FinancesController extends ApiController {
 
             if ($register) {
                 require_once __DIR__ . '/../utils.php';
-                $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by) 
-                                                  VALUES (:move_id, :company_id, :reg_id, :amount, 'entrada', :obs, :uid)");
+                $stmtMove = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by, created_at) 
+                                                  VALUES (:move_id, :company_id, :reg_id, :amount, 'suprimento', :obs, :uid, :now)");
                 $stmtMove->execute([
                     ":move_id" => generateUUID(),
                     ":company_id" => $this->company_id,
                     ":reg_id" => $register['id'],
-                    ":amount" => $data->amount,
-                    ":obs" => "Recebimento: {$data->description}" . ($data->payment_method ? " ({$data->payment_method})" : ""),
-                    ":uid" => $user['id']
+                    ":amount" => abs($data->amount),
+                    ":obs" => "Recebimento CR: {$data->description}" . (($data->payment_method_id ?? $data->payment_method ?? '') ? " (" . ($data->payment_method_id ?? $data->payment_method) . ")" : ""),
+                    ":uid" => $user['id'],
+                    ":now" => date('Y-m-d H:i:s')
                 ]);
             }
         }

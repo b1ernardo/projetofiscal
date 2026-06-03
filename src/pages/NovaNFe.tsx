@@ -55,7 +55,9 @@ export default function NovaNFe() {
                 finNFe: "1", // 1-NF-e normal
                 indPres: "1", // 1-Operação presencial
                 idDest: "1", // 1-Dentro do Estado
-                refNFe: ""
+                refNFe: "",
+                dhEmit: new Date().toISOString().slice(0, 16), // data/hora de emissão
+                dhSaiEnt: new Date().toISOString().slice(0, 16)  // data/hora de saída/entrada
             },
             customer: {
                 documento: "",
@@ -155,15 +157,20 @@ export default function NovaNFe() {
             .catch(() => toast.error("Erro ao carregar rascunho."));
     }, [rascunhoId, setValue]);
 
-    // ─── Natureza da Operação Padrão ─────────────────────────────────────────────
+    // ─── Natureza da Operação e Série Padrão ──────────────────────────────────────
     useEffect(() => {
-        if (!rascunhoId && !vendaId && naturezas && naturezas.length > 0) {
-            const padrao = (naturezas as any[]).find(n => n.padrao);
-            if (padrao) {
-                setValue("ide.natOp", padrao.descricao);
+        if (!rascunhoId && !vendaId) {
+            if (naturezas && naturezas.length > 0) {
+                const padrao = (naturezas as any[]).find(n => n.padrao);
+                if (padrao) {
+                    setValue("ide.natOp", padrao.descricao);
+                }
+            }
+            if (emitenteConfig?.serie_nfe) {
+                setValue("ide.serie", emitenteConfig.serie_nfe.toString());
             }
         }
-    }, [naturezas, rascunhoId, vendaId, setValue]);
+    }, [naturezas, emitenteConfig, rascunhoId, vendaId, setValue]);
 
     // ─── Salvar Rascunho ──────────────────────────────────────────────────────────
     const handleSaveDraft = async (data: any) => {
@@ -237,7 +244,9 @@ export default function NovaNFe() {
             try {
                 result = JSON.parse(rawText);
             } catch (e) {
-                throw new Error(!response.ok ? `Erro Servidor: ${rawText.substring(0, 150)}...` : 'Falha ao analisar a resposta');
+                // resposta não é JSON — provavelmente erro PHP/fatal
+                const preview = rawText.replace(/<[^>]*>/g, '').trim().substring(0, 400) || '(resposta vazia do servidor)';
+                throw new Error(`Erro Servidor (não-JSON): ${preview}`);
             }
 
             if (!response.ok) throw new Error(result.message || "Erro ao emitir NF-e");
@@ -409,7 +418,7 @@ export default function NovaNFe() {
                             <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:md:grid-cols-4 gap-4">
                                 <div className="space-y-2">
                                     <Label>Tipo da Nota</Label>
-                                    <Select onValueChange={(v) => setValue("ide.tpNF", v)} defaultValue="1">
+                                    <Select onValueChange={(v) => setValue("ide.tpNF", v)} value={watch("ide.tpNF")}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="1">1 - Saída</SelectItem>
@@ -482,7 +491,7 @@ export default function NovaNFe() {
                                 </div>
                                 <div className="space-y-2 lg:col-span-2">
                                     <Label>Finalidade</Label>
-                                    <Select onValueChange={(v) => setValue("ide.finNFe", v)} defaultValue="1">
+                                    <Select onValueChange={(v) => setValue("ide.finNFe", v)} value={watch("ide.finNFe")}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="1">1 - NF-e Normal</SelectItem>
@@ -494,7 +503,7 @@ export default function NovaNFe() {
                                 </div>
                                 <div className="space-y-2 lg:col-span-2">
                                     <Label>Indicador de Presença</Label>
-                                    <Select onValueChange={(v) => setValue("ide.indPres", v)} defaultValue="1">
+                                    <Select onValueChange={(v) => setValue("ide.indPres", v)} value={watch("ide.indPres")}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="0">0 - Não se aplica</SelectItem>
@@ -508,7 +517,7 @@ export default function NovaNFe() {
                                 </div>
                                 <div className="space-y-2 lg:col-span-2">
                                     <Label>Destino da Operação</Label>
-                                    <Select onValueChange={(v) => setValue("ide.idDest", v)} defaultValue="1">
+                                    <Select onValueChange={(v) => setValue("ide.idDest", v)} value={watch("ide.idDest")}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="1">1 - Operação Interna</SelectItem>
@@ -516,6 +525,23 @@ export default function NovaNFe() {
                                             <SelectItem value="3">3 - Operação com Exterior</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                </div>
+                                <div className="space-y-2 lg:col-span-2">
+                                    <Label>Data / Hora de Emissão</Label>
+                                    <Input
+                                        type="datetime-local"
+                                        {...register("ide.dhEmit")}
+                                        required
+                                    />
+                                    <p className="text-[11px] text-muted-foreground">Data e hora em que a nota está sendo emitida.</p>
+                                </div>
+                                <div className="space-y-2 lg:col-span-2">
+                                    <Label>Data / Hora de Saída ou Entrada</Label>
+                                    <Input
+                                        type="datetime-local"
+                                        {...register("ide.dhSaiEnt")}
+                                    />
+                                    <p className="text-[11px] text-muted-foreground">Data/hora real de saída da mercadoria. Pode ser igual à emissão.</p>
                                 </div>
                                 <div className="space-y-2 lg:col-span-2">
                                     <Label>Chave NF-e Referenciada (Opcional)</Label>
@@ -643,9 +669,9 @@ export default function NovaNFe() {
                                     <Label>Município</Label>
                                     <Input {...register("customer.municipio")} required />
                                 </div>
-                                <div className="space-y-2 hidden">
-                                    <Label>Cód IBGE</Label>
-                                    <Input {...register("customer.codigo_municipio")} required />
+                                <div className="space-y-2">
+                                    <Label>Cód IBGE do Município</Label>
+                                    <Input {...register("customer.codigo_municipio")} required placeholder="Ex: 2110206" />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>UF</Label>
@@ -849,7 +875,7 @@ export default function NovaNFe() {
                                 <div className="space-y-4">
                                     <div>
                                         <Label>Forma de Pagamento Principal</Label>
-                                        <Select onValueChange={(v) => setValue("payments.0.methodName", v)} defaultValue="DINHEIRO">
+                                        <Select onValueChange={(v) => setValue("payments.0.methodName", v)} value={watch("payments.0.methodName")}>
                                             <SelectTrigger className="mt-1">
                                                 <SelectValue placeholder="Selecione o método" />
                                             </SelectTrigger>
@@ -1172,9 +1198,9 @@ export default function NovaNFe() {
                                             <td className="border-r border-black p-1 text-center align-top">{it.csosn || it.cst}</td>
                                             <td className="border-r border-black p-1 text-center align-top">{it.cfop_padrao}</td>
                                             <td className="border-r border-black p-1 text-center align-top">{it.unit}</td>
-                                            <td className="border-r border-black p-1 text-right align-top">{it.quantity.toFixed(4).replace('.', ',')}</td>
-                                            <td className="border-r border-black p-1 text-right align-top">{it.unit_price.toFixed(4).replace('.', ',')}</td>
-                                            <td className="border-r border-black p-1 text-right align-top">{(it.quantity * it.unit_price).toFixed(2).replace('.', ',')}</td>
+                                            <td className="border-r border-black p-1 text-right align-top">{(Number(it.quantity) || 0).toFixed(4).replace('.', ',')}</td>
+                                            <td className="border-r border-black p-1 text-right align-top">{(Number(it.unit_price) || 0).toFixed(4).replace('.', ',')}</td>
+                                            <td className="border-r border-black p-1 text-right align-top">{((Number(it.quantity)||0) * (Number(it.unit_price)||0)).toFixed(2).replace('.', ',')}</td>
                                             <td className="border-r border-black p-1 text-right align-top">0,00</td>
                                             <td className="border-r border-black p-1 text-right align-top">0,00</td>
                                             <td className="border-r border-black p-1 text-right align-top">0,00</td>

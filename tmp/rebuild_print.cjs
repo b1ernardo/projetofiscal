@@ -1,0 +1,555 @@
+const fs = require('fs');
+const path = require('path');
+
+const content = `// ============================================================
+// utils/printReceipt.ts – Gerador de Comprovantes
+// ============================================================
+
+export interface ReceiptData {
+  saleNumber: string | number;
+  cart: any[];
+  total: number;
+  discount: number;
+  payments: { methodName: string; amount: number }[];
+  date: Date;
+}
+
+export interface QuoteData {
+  customerName: string;
+  cart: any[];
+  total: number;
+  discount: number;
+  date: Date;
+  validityDays: number;
+  observations?: string;
+  sellerName?: string;
+}
+
+export interface DeliveryData {
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  address: string;
+  type: string;
+  paymentMethod: string;
+  items: any[];
+  subtotal: number;
+  deliveryFee: number;
+  total: number;
+  changeFor?: number;
+  date: Date;
+}
+
+export interface ServiceOrderData {
+  id: string;
+  so_number?: string;
+  customerName: string;
+  customerPhone: string;
+  itemType: string;
+  itemMake: string;
+  itemIdentifier: string;
+  problemReported: string;
+  problemFound: string;
+  servicePerformed: string;
+  status: string;
+  priority: string;
+  entryDate: Date;
+  expectedDelivery: Date;
+  services: any[];
+  items: any[];
+  laborTotal: number;
+  partsTotal: number;
+  discount: number;
+  totalAmount: number;
+}
+
+const formatCurrency = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+const getApiUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  if (apiUrl && apiUrl !== '/api') return apiUrl.replace(/\\/$/, '');
+  if (window.location.pathname.includes('/projetofiscal/')) return '/projetofiscal/api';
+  return '/api';
+};
+
+const getCompanyData = async () => {
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return null;
+    const response = await fetch(\`\${getApiUrl()}/fiscal/config\`, {
+      headers: { Authorization: \`Bearer \${token}\` },
+    });
+    if (response.ok) return await response.json();
+  } catch (e) {
+    console.error('Failed to fetch company data', e);
+  }
+  return null;
+};
+
+const resolveCompany = async () => {
+  const c = await getCompanyData();
+  const companyName = c?.razao_social || c?.nome_fantasia || 'Empresa';
+  const companyAddress = c
+    ? \`\${c.logradouro || ''}, \${c.numero || ''} - \${c.bairro || ''} - \${c.municipio || ''}-\${c.uf || ''}\`
+    : '';
+  const companyCnpjIe = c ? \`CNPJ: \${c.cnpj || ''} | IE: \${c.ie || ''}\` : '';
+  const logoSrc = c?.logo_base64
+    ? c.logo_base64.startsWith('data:')
+      ? c.logo_base64
+      : \`data:image/png;base64,\${c.logo_base64}\`
+    : \`\${getApiUrl()}/logo.php\`;
+  return { companyName, companyAddress, companyCnpjIe, logoSrc };
+};
+
+const executeSilentPrint = (html: string) => {
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(iframe);
+  if (iframe.contentWindow) {
+    iframe.contentWindow.document.open();
+    iframe.contentWindow.document.write(html);
+    iframe.contentWindow.document.close();
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
+    }, 250);
+  } else {
+    if (document.body.contains(iframe)) document.body.removeChild(iframe);
+  }
+};
+
+// ── WhatsApp URLs ──────────────────────────────────────────────────────────
+export const getWhatsappUrl = async (data: ReceiptData) => {
+  const { companyName } = await resolveCompany();
+  const { saleNumber, cart, total, discount, payments, date } = data;
+  const subtotal = cart.reduce((a, i) => a + i.price * i.quantity, 0);
+  let t = \`*COMPROVANTE DE VENDA*\\n*\${companyName}*\\n\`;
+  t += \`Venda #\${saleNumber}\\nData: \${new Date(date).toLocaleString('pt-BR')}\\n\`;
+  t += \`--------------------------------\\n\`;
+  cart.forEach(i => { t += \`\${i.quantity}x \${(i.name || '').substring(0, 20)} - \${formatCurrency(i.price * i.quantity)}\\n\`; });
+  t += \`--------------------------------\\nSubtotal: \${formatCurrency(subtotal)}\\n\`;
+  if (discount > 0) t += \`Desconto: \${formatCurrency(discount)}\\n\`;
+  t += \`*Total: \${formatCurrency(total)}*\\n\\n*Pagamento(s)*\\n\`;
+  payments.forEach(p => { t += \`\${p.methodName}: \${formatCurrency(p.amount)}\\n\`; });
+  t += \`\\nObrigado pela preferência!\`;
+  return \`https://wa.me/?text=\${encodeURIComponent(t)}\`;
+};
+
+export const getQuoteWhatsappUrl = async (data: QuoteData) => {
+  const { companyName } = await resolveCompany();
+  const { customerName, cart, total, discount, date, validityDays, observations } = data;
+  const subtotal = cart.reduce((a, i) => a + i.price * i.quantity, 0);
+  let t = \`*ORÇAMENTO*\\n*\${companyName}*\\n\`;
+  t += \`Cliente: \${customerName}\\nData: \${new Date(date).toLocaleDateString('pt-BR')}\\nValidade: \${validityDays} dias\\n\`;
+  t += \`--------------------------------\\n\`;
+  cart.forEach(i => { t += \`\${i.quantity}x \${(i.name || '').substring(0, 20)} - \${formatCurrency(i.price * i.quantity)}\\n\`; });
+  t += \`--------------------------------\\nSubtotal: \${formatCurrency(subtotal)}\\n\`;
+  if (discount > 0) t += \`Desconto: \${formatCurrency(discount)}\\n\`;
+  t += \`*Total: \${formatCurrency(total)}*\\n\`;
+  if (observations) t += \`\\n*Obs:* \${observations}\\n\`;
+  t += \`\\nObrigado pela preferência! Sujeito a alteração de preços.\`;
+  return \`https://wa.me/?text=\${encodeURIComponent(t)}\`;
+};
+
+// ── Comanda (Cozinha/Bar) ──────────────────────────────────────────────────
+export const printComandaItem = (comandaId: string, itemName: string, quantity: number, observation?: string) => {
+  const date = new Date().toLocaleString('pt-BR');
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+    <style>body{font-family:'Courier New',monospace;font-size:14px;margin:0;padding:10px;max-width:300px;color:#000}
+    @media print{@page{margin:0}body{margin:0;padding:10px}}.text-center{text-align:center}
+    .divider{border-top:1px dashed #000;margin:10px 0}</style></head><body>
+    <div class="text-center"><strong style="font-size:16px">NOVO PEDIDO</strong></div>
+    <div class="divider"></div>
+    <div><strong>Comanda:</strong> \${comandaId}<br/><strong>Data/Hora:</strong> \${date}</div>
+    <div class="divider"></div>
+    <div style="font-size:16px"><strong>\${quantity}x \${itemName}</strong></div>
+    \${observation ? \`<div style="margin-top:5px"><strong>Obs:</strong> \${observation}</div>\` : ''}
+    <div class="divider"></div>
+    <div class="text-center">-- Cozinha/Bar --</div>
+    </body></html>\`;
+  executeSilentPrint(html);
+};
+
+export const printComandaBatch = (comandaId: string, items: any[], mesa?: string) => {
+  const date = new Date().toLocaleString('pt-BR');
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+    <style>body{font-family:'Courier New',monospace;font-size:14px;margin:0;padding:10px;max-width:300px;color:#000}
+    @media print{@page{margin:0}body{margin:0;padding:10px}}.text-center{text-align:center}
+    .divider{border-top:1px dashed #000;margin:10px 0}</style></head><body>
+    <div class="text-center"><strong style="font-size:16px">NOVO PEDIDO</strong></div>
+    <div class="divider"></div>
+    <div><strong>Local:</strong> \${mesa || comandaId}<br/><strong>Data/Hora:</strong> \${date}</div>
+    <div class="divider"></div>
+    <div style="font-size:15px">\${items.map(i => \`<div style="margin-bottom:5px"><strong>\${i.quantity}x \${i.name}</strong>\${i.observation ? \`<br/><small>Obs: \${i.observation}</small>\` : ''}</div>\`).join('')}</div>
+    <div class="divider"></div><div class="text-center">-- Cozinha/Bar --</div>
+    </body></html>\`;
+  executeSilentPrint(html);
+};
+
+// ── Comprovante de Venda (Bobina 80mm) ────────────────────────────────────
+export const printReceipt = async (data: ReceiptData) => {
+  const printWindow = window.open('', '_blank', 'width=420,height=700');
+  if (!printWindow) return;
+  const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
+  const whatsappUrl = await getWhatsappUrl(data);
+  const { saleNumber, cart, total, discount, payments, date } = data;
+  const totalItems = cart.reduce((a, i) => a + Number(i.quantity), 0);
+  const subtotal = cart.reduce((a, i) => a + i.price * i.quantity, 0);
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+  <title>Venda #\${saleNumber}</title>
+  <style>body{font-family:'Courier New',monospace;font-size:12px;margin:0;padding:0;max-width:300px;color:#000}
+  @media print{@page{margin:0}body{margin:0;padding:0}.no-print{display:none!important}}
+  .tc{text-align:center}.tr{text-align:right}.tl{text-align:left}
+  .dv{border-top:1px dashed #000;margin:5px 0}
+  table{width:100%;border-collapse:collapse;margin:5px 0}
+  th,td{padding:2px 0;vertical-align:top}</style></head><body>
+  <div class="no-print" style="text-align:center;padding:10px;background:#f4f4f5;border-bottom:2px solid #e4e4e7;position:sticky;top:0">
+    <button onclick="window.print()" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer">🖨️ Imprimir</button>
+    <button onclick="window.open('\${whatsappUrl}','_blank')" style="padding:8px 16px;background:#25D366;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer;margin-left:8px">💬 WhatsApp</button>
+    <button onclick="window.close()" style="padding:8px 16px;background:#ef4444;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer;margin-left:8px">✕ Fechar</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;margin:8px 4px">
+    <img src="\${logoSrc}" style="width:55px;height:55px;object-fit:contain" onerror="this.style.display='none'"/>
+    <div style="line-height:1.3">
+      <strong style="font-size:13px;color:#003366">\${companyName}</strong><br/>
+      <span style="font-size:9px;color:#003366">\${companyAddress}<br/>\${companyCnpjIe}</span>
+    </div>
+  </div>
+  <div class="tc"><div class="dv"></div>
+    <strong style="font-size:11px">Documento Auxiliar da Nota Fiscal de Consumidor Eletrônica</strong><br/>
+    <strong>Não permite aproveitamento de crédito de ICMS</strong>
+  </div>
+  <div class="dv"></div>
+  <div style="font-size:11px">Venda #\${saleNumber}<br/>Data: \${new Date(date).toLocaleString('pt-BR')}</div>
+  <div class="dv"></div>
+  <table><thead><tr style="border-bottom:1px dashed #000">
+    <th class="tl" style="width:40%">Descrição</th><th class="tr">Qtde</th><th class="tr">UN</th><th class="tr">Unit.</th><th class="tr">Total</th>
+  </tr></thead><tbody>
+    \${cart.map(i => \`<tr>
+      <td class="tl">\${(i.name||'Produto').substring(0,20)}</td>
+      <td class="tr">\${i.quantity}</td><td class="tr">UN</td>
+      <td class="tr">\${Number(i.price).toFixed(2)}</td>
+      <td class="tr">\${(i.price*i.quantity).toFixed(2)}</td>
+    </tr>\`).join('')}
+  </tbody></table>
+  <div class="dv"></div>
+  <div class="tr">
+    Itens: <strong>\${totalItems}</strong><br/>
+    Subtotal: \${formatCurrency(subtotal)}<br/>
+    Desconto: \${formatCurrency(discount)}<br/>
+    <strong style="font-size:14px">Total: \${formatCurrency(total)}</strong>
+  </div>
+  <div class="dv"></div>
+  <table style="width:100%"><thead><tr><th class="tl">PAGAMENTO</th><th class="tr">VALOR</th></tr></thead>
+  <tbody>\${payments.map(p => \`<tr><td class="tl">\${p.methodName}</td><td class="tr">\${formatCurrency(p.amount)}</td></tr>\`).join('')}</tbody></table>
+  <div class="dv"></div>
+  <div class="tc" style="margin-top:10px">Obrigado pela preferência!</div>
+  </body></html>\`;
+  printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
+};
+
+// ── Comprovante A4 ────────────────────────────────────────────────────────
+export const printReceiptA4 = async (data: ReceiptData) => {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+  const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
+  const whatsappUrl = await getWhatsappUrl(data);
+  const subtotal = data.cart.reduce((a, i) => a + i.price * i.quantity, 0);
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Venda #\${data.saleNumber} - A4</title>
+  <style>body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#333}
+  .container{max-width:800px;margin:0 auto;border:1px solid #ddd;padding:20px;border-radius:8px}
+  .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;margin-top:20px}
+  th,td{border:1px solid #ddd;padding:10px;text-align:right}
+  th.tl,td.tl{text-align:left}th{background:#f4f4f5;font-weight:bold}
+  @media print{.no-print{display:none}.container{border:none}}</style></head><body>
+  <div class="no-print" style="margin-bottom:20px">
+    <button onclick="window.print()" style="padding:10px 20px;background:#16a34a;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer">🖨️ IMPRIMIR A4</button>
+    <button onclick="window.open('\${whatsappUrl}','_blank')" style="padding:10px 20px;background:#25D366;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:8px">💬 WHATSAPP</button>
+    <button onclick="window.close()" style="padding:10px 20px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:8px">FECHAR</button>
+  </div>
+  <div class="container">
+    <div class="header">
+      <div style="display:flex;gap:15px;align-items:center">
+        <img src="\${logoSrc}" style="width:80px;height:80px;object-fit:contain" onerror="this.style.display='none'"/>
+        <div><h1 style="margin:0;color:#003366;font-size:18pt">\${companyName}</h1>
+             <p style="margin:5px 0 0 0;color:#555">\${companyAddress} | \${companyCnpjIe}</p></div>
+      </div>
+      <div style="text-align:right">
+        <h2 style="margin:0">COMPROVANTE DE VENDA</h2>
+        <p><b>#\${data.saleNumber}</b> | \${new Date(data.date).toLocaleString('pt-BR')}</p>
+      </div>
+    </div>
+    <table><thead><tr><th class="tl">Produto</th><th>Qtd</th><th>Unit.</th><th>Total</th></tr></thead>
+    <tbody>\${data.cart.map(i=>\`<tr><td class="tl">\${i.name||'Produto'}</td><td>\${i.quantity}</td><td>\${Number(i.price).toFixed(2)}</td><td>\${(i.price*i.quantity).toFixed(2)}</td></tr>\`).join('')}</tbody></table>
+    <div style="margin-top:20px;text-align:right;font-size:14pt">
+      <p>Subtotal: <b>\${formatCurrency(subtotal)}</b></p>
+      <p>Desconto: <b>\${formatCurrency(data.discount)}</b></p>
+      <h2 style="color:#000;margin-top:10px">TOTAL: \${formatCurrency(data.total)}</h2>
+    </div>
+    <div style="margin-top:20px;display:flex;gap:20px;justify-content:flex-end">
+      \${data.payments.map(p=>\`<div style="padding:10px;background:#f8fafc;border:1px solid #ddd;border-radius:4px">\${p.methodName}: <b>\${formatCurrency(p.amount)}</b></div>\`).join('')}
+    </div>
+  </div></body></html>\`;
+  printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
+};
+
+// ── Orçamento Bobina ──────────────────────────────────────────────────────
+export const printQuote = async (data: QuoteData) => {
+  const printWindow = window.open('', '_blank', 'width=420,height=700');
+  if (!printWindow) return;
+  const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
+  const whatsappUrl = await getQuoteWhatsappUrl(data);
+  const { customerName, cart, total, discount, date, validityDays, observations } = data;
+  const totalItems = cart.reduce((a, i) => a + Number(i.quantity), 0);
+  const subtotal = cart.reduce((a, i) => a + i.price * i.quantity, 0);
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Orçamento - \${customerName}</title>
+  <style>body{font-family:'Courier New',monospace;font-size:12px;margin:0;padding:0;max-width:300px;color:#000}
+  @media print{@page{margin:0}body{margin:0;padding:0}.no-print{display:none!important}}
+  .tc{text-align:center}.tr{text-align:right}.tl{text-align:left}
+  .dv{border-top:1px dashed #000;margin:5px 0}
+  table{width:100%;border-collapse:collapse;margin:5px 0}th,td{padding:2px 0;vertical-align:top}</style></head><body>
+  <div class="no-print" style="text-align:center;padding:10px;background:#f4f4f5;border-bottom:2px solid #e4e4e7;position:sticky;top:0">
+    <button onclick="window.print()" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer">🖨️ Imprimir</button>
+    <button onclick="window.open('\${whatsappUrl}','_blank')" style="padding:8px 16px;background:#25D366;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer;margin-left:8px">💬 WhatsApp</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;margin:8px 4px">
+    <img src="\${logoSrc}" style="width:55px;height:55px;object-fit:contain" onerror="this.style.display='none'"/>
+    <div style="line-height:1.3">
+      <strong style="font-size:13px;color:#003366">\${companyName}</strong><br/>
+      <span style="font-size:9px;color:#003366">\${companyAddress}<br/>\${companyCnpjIe}</span>
+    </div>
+  </div>
+  <div class="tc"><strong style="font-size:16px">O R Ç A M E N T O</strong></div>
+  <div class="dv"></div>
+  <div style="font-size:11px">Cliente: \${customerName}<br/>Data: \${new Date(date).toLocaleDateString('pt-BR')}<br/>Validade: \${validityDays} dias</div>
+  <div class="dv"></div>
+  <table><thead><tr style="border-bottom:1px dashed #000">
+    <th class="tl">Descrição</th><th class="tr">Qtde</th><th class="tr">Unit.</th><th class="tr">Total</th>
+  </tr></thead><tbody>
+    \${cart.map(i=>\`<tr><td class="tl">\${(i.name||'Produto').substring(0,18)}</td><td class="tr">\${i.quantity}</td><td class="tr">\${Number(i.price).toFixed(2)}</td><td class="tr">\${(i.price*i.quantity).toFixed(2)}</td></tr>\`).join('')}
+  </tbody></table>
+  <div class="dv"></div>
+  \${observations??\`<div style="font-size:10px;margin-bottom:5px"><strong>Obs:</strong> \${observations}</div><div class="dv"></div>\`:''}
+  <div class="tr">Itens: <strong>\${totalItems}</strong><br/>Subtotal: \${formatCurrency(subtotal)}<br/>Desconto: \${formatCurrency(discount)}<br/><strong style="font-size:14px">Total: \${formatCurrency(total)}</strong></div>
+  <div class="dv"></div>
+  <div class="tc" style="margin-top:10px;font-size:10px">Este documento não é nota fiscal.<br/>Preços sujeitos a alteração.</div>
+  </body></html>\`;
+  printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
+};
+
+// ── Orçamento A4 ──────────────────────────────────────────────────────────
+export const printQuoteA4 = async (data: QuoteData) => {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+  const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
+  const whatsappUrl = await getQuoteWhatsappUrl(data);
+  const subtotal = data.cart.reduce((a, i) => a + i.price * i.quantity, 0);
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Orçamento - \${data.customerName}</title>
+  <style>body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#333}
+  .container{max-width:800px;margin:0 auto;border:1px solid #ddd;padding:20px;border-radius:8px}
+  .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;margin-top:20px}
+  th,td{border:1px solid #ddd;padding:10px;text-align:right}
+  th.tl,td.tl{text-align:left}th{background:#f4f4f5;font-weight:bold}
+  @media print{.no-print{display:none}.container{border:none}}</style></head><body>
+  <div class="no-print" style="margin-bottom:20px">
+    <button onclick="window.print()" style="padding:10px 20px;background:#16a34a;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer">🖨️ IMPRIMIR A4</button>
+    <button onclick="window.open('\${whatsappUrl}','_blank')" style="padding:10px 20px;background:#25D366;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:8px">💬 WHATSAPP</button>
+    <button onclick="window.close()" style="padding:10px 20px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:8px">FECHAR</button>
+  </div>
+  <div class="container">
+    <div class="header">
+      <div style="display:flex;gap:15px;align-items:center">
+        <img src="\${logoSrc}" style="width:80px;height:80px;object-fit:contain" onerror="this.style.display='none'"/>
+        <div><h1 style="margin:0;color:#003366;font-size:18pt">\${companyName}</h1>
+             <p style="margin:5px 0 0 0;color:#555">\${companyAddress} | \${companyCnpjIe}</p></div>
+      </div>
+      <div style="text-align:right"><h2 style="margin:0">ORÇAMENTO</h2><p>Validade: \${data.validityDays} dias</p></div>
+    </div>
+    <div style="margin-bottom:20px;padding:15px;border:1px solid #ddd;border-radius:6px;background:#fafafa">
+      <h3 style="margin:0 0 8px">DADOS DO CLIENTE</h3>
+      <p style="margin:2px 0">Nome: \${data.customerName}</p>
+      <p style="margin:2px 0">Data: \${new Date(data.date).toLocaleDateString('pt-BR')}</p>
+    </div>
+    <table><thead><tr><th class="tl">Produto</th><th>Qtd</th><th>Unit.</th><th>Total</th></tr></thead>
+    <tbody>\${data.cart.map(i=>\`<tr><td class="tl">\${i.name||'Produto'}</td><td>\${i.quantity}</td><td>\${Number(i.price).toFixed(2)}</td><td>\${(i.price*i.quantity).toFixed(2)}</td></tr>\`).join('')}</tbody></table>
+    \${data.observations?\`<div style="margin-top:20px;padding:15px;border:1px solid #ddd;border-radius:6px"><strong>Observações:</strong><p>\${data.observations}</p></div>\`:''}
+    <div style="margin-top:20px;text-align:right;font-size:14pt">
+      <p>Subtotal: <b>\${formatCurrency(subtotal)}</b></p>
+      <p>Desconto: <b>\${formatCurrency(data.discount)}</b></p>
+      <h2 style="color:#000;margin-top:10px">TOTAL: \${formatCurrency(data.total)}</h2>
+    </div>
+  </div></body></html>\`;
+  printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
+};
+
+// ── Delivery Bobina ───────────────────────────────────────────────────────
+export const printDelivery = async (data: DeliveryData) => {
+  const printWindow = window.open('', '_blank', 'width=420,height=700');
+  if (!printWindow) return;
+  const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
+  const { orderNumber, customerName, customerPhone, address, type, paymentMethod, items, subtotal, deliveryFee, total, changeFor, date } = data;
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pedido #\${orderNumber}</title>
+  <style>body{font-family:'Courier New',monospace;font-size:12px;margin:0;padding:0;max-width:300px;color:#000}
+  @media print{@page{margin:0}body{margin:0;padding:0}.no-print{display:none!important}}
+  .tc{text-align:center}.tr{text-align:right}.tl{text-align:left}
+  .dv{border-top:1px dashed #000;margin:5px 0}
+  table{width:100%;border-collapse:collapse;margin:5px 0}th,td{padding:2px 0;vertical-align:top}</style></head><body>
+  <div class="no-print" style="text-align:center;padding:10px;background:#f4f4f5;border-bottom:2px solid #e4e4e7;position:sticky;top:0">
+    <button onclick="window.print()" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer">🖨️ Imprimir</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;margin:8px 4px">
+    <img src="\${logoSrc}" style="width:55px;height:55px;object-fit:contain" onerror="this.style.display='none'"/>
+    <div style="line-height:1.3">
+      <strong style="font-size:13px;color:#003366">\${companyName}</strong><br/>
+      <span style="font-size:9px;color:#003366">\${companyAddress}<br/>\${companyCnpjIe}</span>
+    </div>
+  </div>
+  <div class="tc"><strong style="font-size:14px">COMPROVANTE DE \${type==='retirada'?'RETIRADA':'ENTREGA'}</strong><br/>Pedido #\${orderNumber}</div>
+  <div class="dv"></div>
+  <div style="font-size:11px">
+    <strong>Data:</strong> \${new Date(date).toLocaleString('pt-BR')}<br/>
+    <strong>Cliente:</strong> \${customerName}<br/>
+    <strong>Telefone:</strong> \${customerPhone}<br/>
+    \${type==='entrega'?\`<strong>Endereço:</strong> \${address}<br/>\`:''}
+  </div>
+  <div class="dv"></div>
+  <table><thead><tr style="border-bottom:1px dashed #000"><th class="tl">Qtd</th><th class="tl">Produto</th><th class="tr">Total</th></tr></thead>
+  <tbody>\${items.map(i=>\`<tr><td class="tl">\${i.quantity}</td><td class="tl">\${(i.product_name||i.name||'Produto').substring(0,20)}</td><td class="tr">\${formatCurrency(Number(i.unit_price)*Number(i.quantity))}</td></tr>\`).join('')}</tbody></table>
+  <div class="dv"></div>
+  <div class="tr" style="font-size:11px">
+    Subtotal: \${formatCurrency(subtotal)}<br/>
+    \${type==='entrega'?\`Taxa de Entrega: \${formatCurrency(deliveryFee)}<br/>\`:''}
+    <strong style="font-size:14px">TOTAL: \${formatCurrency(total)}</strong>
+  </div>
+  <div class="dv"></div>
+  <div style="font-size:11px">
+    <strong>Pagamento:</strong> \${paymentMethod}<br/>
+    \${changeFor?\`<strong>Troco para:</strong> \${formatCurrency(changeFor)}<br/><strong>Troco a levar:</strong> \${formatCurrency(changeFor-total)}\`:''}
+  </div>
+  <div class="dv"></div>
+  <div class="tc" style="margin-top:10px;font-size:10px">Documento sem valor fiscal</div>
+  </body></html>\`;
+  printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
+};
+
+// ── Delivery A4 ───────────────────────────────────────────────────────────
+export const printDeliveryA4 = async (data: DeliveryData) => {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+  const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
+  const { orderNumber, customerName, customerPhone, address, type, paymentMethod, items, subtotal, deliveryFee, total, changeFor, date } = data;
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Delivery #\${orderNumber}</title>
+  <style>body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#333}
+  .container{max-width:800px;margin:0 auto;border:1px solid #ddd;padding:20px;border-radius:8px}
+  .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;margin-top:20px}
+  th,td{border:1px solid #ddd;padding:10px;text-align:left}
+  th{background:#f4f4f5;font-weight:bold}
+  @media print{.no-print{display:none}.container{border:none}}</style></head><body>
+  <div class="no-print" style="margin-bottom:20px">
+    <button onclick="window.print()" style="padding:10px 20px;background:#16a34a;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer">🖨️ IMPRIMIR A4</button>
+    <button onclick="window.close()" style="padding:10px 20px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:8px">FECHAR</button>
+  </div>
+  <div class="container">
+    <div class="header">
+      <div style="display:flex;gap:15px;align-items:center">
+        <img src="\${logoSrc}" style="width:80px;height:80px;object-fit:contain" onerror="this.style.display='none'"/>
+        <div><h1 style="margin:0;color:#003366;font-size:18pt">\${companyName}</h1>
+             <p style="margin:5px 0 0 0;color:#555">\${companyAddress} | \${companyCnpjIe}</p></div>
+      </div>
+      <div style="text-align:right"><h2 style="margin:0">PEDIDO \${type==='retirada'?'RETIRADA':'ENTREGA'}</h2><p><b>#\${orderNumber}</b></p></div>
+    </div>
+    <div style="margin-bottom:20px;padding:15px;background:#f8fafc;border:1px solid #ddd;border-radius:6px">
+      <h3 style="margin:0 0 8px">DADOS DA \${type==='retirada'?'RETIRADA':'ENTREGA'}</h3>
+      <p style="margin:2px 0">Data: \${new Date(date).toLocaleString('pt-BR')}</p>
+      <p style="margin:2px 0">Cliente: \${customerName}</p>
+      <p style="margin:2px 0">Telefone: \${customerPhone}</p>
+      \${type==='entrega'?\`<p style="margin:2px 0">Endereço: \${address}</p>\`:''}
+    </div>
+    <table><thead><tr><th>Qtd</th><th>Produto</th><th style="text-align:right">Total</th></tr></thead>
+    <tbody>\${items.map(i=>\`<tr><td>\${i.quantity}</td><td>\${i.product_name||i.name||'Produto'}</td><td style="text-align:right">\${formatCurrency(Number(i.unit_price)*Number(i.quantity))}</td></tr>\`).join('')}</tbody></table>
+    <div style="margin-top:20px;padding:15px;text-align:right;border-top:1px solid #ddd">
+      <p>Subtotal: \${formatCurrency(subtotal)}</p>
+      \${type==='entrega'?\`<p>Taxa de Entrega: \${formatCurrency(deliveryFee)}</p>\`:''}
+      <h2 style="color:#000">TOTAL: \${formatCurrency(total)}</h2>
+      <p>Forma de Pagamento: <b>\${paymentMethod}</b></p>
+      \${changeFor?\`<p>Troco para: \${formatCurrency(changeFor)} | Troco a levar: \${formatCurrency(changeFor-total)}</p>\`:''}
+    </div>
+  </div></body></html>\`;
+  printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
+};
+
+// ── OS Bobina ─────────────────────────────────────────────────────────────
+export const printSO_A4 = async (data: ServiceOrderData) => {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return;
+  const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
+  const { id, so_number, customerName, customerPhone, itemType, itemMake, itemIdentifier, problemReported, problemFound, servicePerformed, services, items, laborTotal, partsTotal, discount, totalAmount, status, priority, entryDate, expectedDelivery } = data;
+  const osNum = so_number || id.slice(0,8).toUpperCase();
+
+  const renderCopy = (via: string) => \`
+    <div class="copy">
+      <div class="via">\${via}</div>
+      <div class="hdr">
+        <div style="display:flex;gap:10px;align-items:center">
+          <img src="\${logoSrc}" style="width:60px;height:60px;object-fit:contain" onerror="this.style.display='none'"/>
+          <div><h2 style="margin:0;color:#003366;\${companyName}</h2>
+               <p style="margin:2px 0;font-size:9pt;color:#555">\${companyAddress} | \${companyCnpjIe}</p></div>
+        </div>
+        <div style="text-align:right"><h3 style="margin:0">ORDEM DE SERVIÇO</h3><p style="margin:2px 0">Nº <b>\${osNum}</b> | \${status.toUpperCase()}</p></div>
+      </div>
+      <div class="sec"><div class="sec-h">CLIENTE E OBJETO</div><div class="sec-c">
+        <b>Cliente:</b> \${customerName} &nbsp;|&nbsp; <b>Telefone:</b> \${customerPhone||'—'}<br/>
+        <b>Objeto:</b> \${itemType.toUpperCase()} \${itemMake||''} &nbsp;|&nbsp; <b>ID/Série:</b> \${itemIdentifier||'—'}<br/>
+        <b>Entrada:</b> \${entryDate instanceof Date?entryDate.toLocaleDateString('pt-BR'):entryDate} &nbsp;|&nbsp; <b>Previsão:</b> \${expectedDelivery instanceof Date?expectedDelivery.toLocaleDateString('pt-BR'):'N/A'}
+      </div></div>
+      <div class="sec"><div class="sec-h">DIAGNÓSTICO</div><div class="sec-c" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><small><b>Problema Relatado</b></small><div class="diag">\${problemReported}</div></div>
+        <div><small><b>Serviço / Diagnóstico</b></small><div class="diag" style="background:#f0fdf4">\${problemFound||servicePerformed||'Em análise...'}</div></div>
+      </div></div>
+      \${services.length>0||items.length>0?\`<div class="sec"><div class="sec-h">SERVIÇOS E PEÇAS</div>
+      <table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f4f4f5"><th style="text-align:left;padding:4px 8px">Descrição</th><th style="padding:4px;text-align:right">Qtd</th><th style="padding:4px;text-align:right">Valor</th></tr></thead>
+      <tbody>\${services.map(s=>\`<tr><td style="padding:3px 8px">(S) \${s.description}</td><td style="padding:3px;text-align:right">1</td><td style="padding:3px;text-align:right">\${formatCurrency(Number(s.price))}</td></tr>\`).join('')}\${items.map(i=>\`<tr><td style="padding:3px 8px">(P) \${i.description}</td><td style="padding:3px;text-align:right">\${i.quantity}</td><td style="padding:3px;text-align:right">\${formatCurrency(Number(i.total_price))}</td></tr>\`).join('')}</tbody></table></div>\`:''}
+      <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:15px;margin-top:8px">
+        <div style="border:1px solid #ddd;padding:8px;border-radius:4px">
+          <div style="display:flex;justify-content:space-between;font-size:9pt">Mão de obra: <b>\${formatCurrency(laborTotal)}</b></div>
+          <div style="display:flex;justify-content:space-between;font-size:9pt">Peças: <b>\${formatCurrency(partsTotal)}</b></div>
+          <div style="display:flex;justify-content:space-between;font-size:9pt">Desconto: <b>\${formatCurrency(discount)}</b></div>
+          <div style="display:flex;justify-content:space-between;font-size:11pt;font-weight:bold;border-top:1px solid #000;margin-top:4px;padding-top:4px">TOTAL: \${formatCurrency(totalAmount)}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="border-top:1px solid #000;text-align:center;font-size:8pt;padding-top:4px;margin-top:30px">Assinatura Técnico</div>
+          <div style="border-top:1px solid #000;text-align:center;font-size:8pt;padding-top:4px;margin-top:30px">Assinatura Cliente</div>
+        </div>
+      </div>
+    </div>\`;
+
+  const html = \`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS #\${osNum}</title>
+  <style>@page{size:A4;margin:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:8.5pt;color:#333;margin:0;padding:0}
+  .copy{width:210mm;height:148mm;padding:8mm;box-sizing:border-box;overflow:hidden;position:relative}
+  .copy:first-child{border-bottom:2px dashed #999}
+  .via{position:absolute;top:8mm;right:8mm;font-size:7pt;color:#aaa;text-transform:uppercase;font-weight:bold}
+  .hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #000;padding-bottom:5px;margin-bottom:6px}
+  .sec{margin-bottom:5px;border:1px solid #ddd;border-radius:3px;overflow:hidden}
+  .sec-h{background:#f4f4f5;padding:2px 8px;font-size:7pt;font-weight:bold;text-transform:uppercase;border-bottom:1px solid #ddd}
+  .sec-c{padding:4px 8px;font-size:7.5pt}
+  .diag{border:1px solid #eee;padding:3px;margin-top:2px;font-size:7.5pt;min-height:12px}
+  @media print{.no-print{display:none}}</style></head><body>
+  <div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#111;color:#fff;padding:8px;text-align:center;z-index:100">
+    <button onclick="window.print()" style="padding:8px 16px;background:#16a34a;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer">🖨️ IMPRIMIR A4 (2 VIAS)</button>
+    <button onclick="window.close()" style="padding:8px 16px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:8px">FECHAR</button>
+  </div>
+  \${renderCopy('1ª Via – Empresa')}
+  \${renderCopy('2ª Via – Cliente')}
+  </body></html>\`;
+  printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
+};
+`;
+
+const filePath = path.join(__dirname, '../src/utils/printReceipt.ts');
+fs.writeFileSync(filePath, content, 'utf8');
+console.log('printReceipt.ts rebuilt successfully!');

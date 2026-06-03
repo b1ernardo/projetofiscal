@@ -46,6 +46,7 @@ const fiscalSchema = z.object({
   csc_token: z.string().optional(),
   certificado_senha: z.string().optional(),
   percentual_tributos: z.coerce.number().min(0).max(100).optional(),
+  logo_base64: z.string().optional(),
 });
 
 type FiscalFormValues = z.infer<typeof fiscalSchema>;
@@ -87,6 +88,7 @@ export function FiscalConfig() {
       ultimo_numero_nfce: 0, serie_nfce: 1,
       csc_id: "", csc_token: "", certificado_senha: "",
       percentual_tributos: 0,
+      logo_base64: "",
     },
   });
 
@@ -94,7 +96,12 @@ export function FiscalConfig() {
 
   const fetchConfig = async () => {
     try {
-      const res = await fetch(`${apiUrl}/fiscal/config`);
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch(`${apiUrl}/fiscal/config`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await res.json();
       if (data) {
         form.reset({
@@ -106,6 +113,7 @@ export function FiscalConfig() {
           fone: data.fone || "",
           certificado_senha: "",
           percentual_tributos: Number(data.percentual_tributos) || 0,
+          logo_base64: data.logo_base64 || "",
         });
       }
     } catch { toast.error("Erro ao carregar configurações fiscais"); }
@@ -123,12 +131,27 @@ export function FiscalConfig() {
     reader.readAsDataURL(file);
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      form.setValue("logo_base64", reader.result as string);
+      toast.success("Logotipo selecionado com sucesso");
+    };
+    reader.readAsDataURL(file);
+  };
+
   async function onSubmit(values: FiscalFormValues) {
     setLoading(true);
     try {
+      const token = localStorage.getItem('auth_token');
       const res = await fetch(`${apiUrl}/fiscal/config`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({ ...values, certificado_pfx: certificadoBase64 }),
       });
       if (res.ok) toast.success("Configurações fiscais salvas com sucesso!");
@@ -196,6 +219,25 @@ export function FiscalConfig() {
                   <FormField control={form.control} name="cod_municipio" render={({ field }) => (
                     <FormItem><FormLabel>Cód. Município (IBGE)</FormLabel><FormControl><Input {...field} maxLength={7} /></FormControl><FormMessage /></FormItem>
                   )} />
+                </div>
+                
+                <div className="pt-4 border-t">
+                  <FormLabel>Logotipo da Empresa (Aparece em Recibos, NFe e Delivery)</FormLabel>
+                  <div className="flex items-center gap-4 mt-2">
+                    {form.watch("logo_base64") ? (
+                      <div className="relative w-16 h-16 rounded overflow-hidden border">
+                         <img src={form.watch("logo_base64")} className="w-full h-full object-cover" alt="Logo" />
+                         <button type="button" onClick={() => form.setValue("logo_base64", "")} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                            <X className="w-5 h-5" />
+                         </button>
+                      </div>
+                    ) : (
+                      <Button type="button" variant="outline" onClick={() => document.getElementById('logo-upload')?.click()}>
+                        <Upload className="mr-2 h-4 w-4" /> Enviar Logotipo
+                      </Button>
+                    )}
+                    <input id="logo-upload" type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -403,8 +445,8 @@ export function FiscalConfig() {
                 <div
                   key={nat.id}
                   className={`flex items-center gap-2 rounded-lg border p-3 shadow-sm transition-colors ${nat.padrao
-                      ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-300 dark:border-yellow-700"
-                      : "bg-background"
+                    ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-300 dark:border-yellow-700"
+                    : "bg-background"
                     }`}
                 >
                   {/* Botão estrela — define padrão */}

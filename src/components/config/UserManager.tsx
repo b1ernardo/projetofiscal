@@ -18,6 +18,7 @@ interface User {
     roles: string[];
     permissions: string[];
     created_at: string;
+    max_discount: number;
 }
 
 export function UserManager() {
@@ -34,6 +35,7 @@ export function UserManager() {
     const [phone, setPhone] = useState("");
     const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
     const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
+    const [maxDiscount, setMaxDiscount] = useState<number>(100);
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -63,6 +65,7 @@ export function UserManager() {
             setFullName(user.full_name);
             setPhone(user.phone || "");
             setSelectedRoles(user.roles);
+            setMaxDiscount(user.max_discount || 100);
         } else {
             setEditingUser(null);
             setEmail("");
@@ -70,6 +73,7 @@ export function UserManager() {
             setFullName("");
             setPhone("");
             setSelectedRoles(["operador_caixa"]);
+            setMaxDiscount(100);
         }
         setFormOpen(true);
     };
@@ -104,7 +108,8 @@ export function UserManager() {
                     password: password || undefined,
                     full_name: fullName,
                     phone,
-                    roles: selectedRoles
+                    roles: selectedRoles,
+                    max_discount: maxDiscount
                 })
             });
 
@@ -315,7 +320,20 @@ export function UserManager() {
                                     </div>
                                 ))}
                             </div>
+                            <div className="space-y-2 border-t pt-4">
+                            <Label htmlFor="max_discount" className="text-blue-600 font-bold">Desconto Máximo Permitido (%)</Label>
+                            <Input 
+                                id="max_discount" 
+                                type="number" 
+                                min="0" 
+                                max="100" 
+                                step="0.1"
+                                value={maxDiscount} 
+                                onChange={(e) => setMaxDiscount(Number(e.target.value))} 
+                            />
+                            <p className="text-[10px] text-muted-foreground italic">Limite que este usuário poderá dar de desconto em uma venda.</p>
                         </div>
+                    </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>

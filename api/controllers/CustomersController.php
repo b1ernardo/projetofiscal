@@ -21,30 +21,34 @@ class CustomersController extends ApiController {
             $this->jsonResponse(["message" => "Nome é obrigatório"], 400);
         }
 
-        $id = generateUUID();
-        $query = "INSERT INTO customers (id, company_id, name, cpf_cnpj, email, phone, address, ie, cep, logradouro, numero, bairro, municipio, codigo_municipio, uf) 
-                  VALUES (:id, :company_id, :name, :cpf_cnpj, :email, :phone, :address, :ie, :cep, :logradouro, :numero, :bairro, :municipio, :codigo_municipio, :uf)";
-        
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute([
-            ":id" => $id,
-            ":company_id" => $this->company_id,
-            ":name" => $data->name,
-            ":cpf_cnpj" => $data->cpf_cnpj ?? null,
-            ":email" => $data->email ?? null,
-            ":phone" => $data->phone ?? null,
-            ":address" => $data->address ?? null,
-            ":ie" => $data->ie ?? null,
-            ":cep" => $data->cep ?? null,
-            ":logradouro" => $data->logradouro ?? null,
-            ":numero" => $data->numero ?? null,
-            ":bairro" => $data->bairro ?? null,
-            ":municipio" => $data->municipio ?? null,
-            ":codigo_municipio" => $data->codigo_municipio ?? null,
-            ":uf" => $data->uf ?? null
-        ]);
+        try {
+            $id = generateUUID();
+            $query = "INSERT INTO customers (id, company_id, name, cpf_cnpj, email, phone, address, ie, cep, logradouro, numero, bairro, municipio, codigo_municipio, uf) 
+                      VALUES (:id, :company_id, :name, :cpf_cnpj, :email, :phone, :address, :ie, :cep, :logradouro, :numero, :bairro, :municipio, :codigo_municipio, :uf)";
+            
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([
+                ":id" => $id,
+                ":company_id" => $this->company_id,
+                ":name" => $data->name,
+                ":cpf_cnpj" => $data->cpf_cnpj ?? null,
+                ":email" => $data->email ?? null,
+                ":phone" => $data->phone ?? null,
+                ":address" => $data->address ?? null,
+                ":ie" => $data->ie ?? null,
+                ":cep" => $data->cep ?? null,
+                ":logradouro" => $data->logradouro ?? null,
+                ":numero" => $data->numero ?? null,
+                ":bairro" => $data->bairro ?? null,
+                ":municipio" => $data->municipio ?? null,
+                ":codigo_municipio" => $data->codigo_municipio ?? null,
+                ":uf" => $data->uf ?? null
+            ]);
 
-        $this->jsonResponse(["message" => "Cliente criado", "id" => $id], 201);
+            $this->jsonResponse(["message" => "Cliente criado", "id" => $id], 201);
+        } catch (Exception $e) {
+            $this->jsonResponse(["message" => "Erro ao salvar cliente: " . $e->getMessage()], 500);
+        }
     }
 
     public function update($id) {

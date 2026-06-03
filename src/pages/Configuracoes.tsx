@@ -23,7 +23,8 @@ export default function Configuracoes() {
       case "pagamentos": return hasPermission("finances");
       case "delivery": return hasPermission("delivery");
       case "fiscal": return hasPermission("fiscal");
-      case "usuarios": return true; // Always allow users to see their profile/users if they have user permission
+      case "dados-empresa": return hasPermission("dados_empresa") || hasPermission("fiscal") || hasPermission("configuracoes");
+      case "usuarios": return true;
       default: return true;
     }
   };
@@ -38,18 +39,25 @@ export default function Configuracoes() {
     }
   }, [tab]);
 
+  const getDefaultTab = () => {
+    if (hasPermission("dados_empresa")) return "dados-empresa";
+    if (hasPermission("fiscal")) return "fiscal";
+    return "usuarios";
+  };
+
   if (!tab || !isTabAllowed(tab)) {
-    return <Navigate to="/configuracoes?tab=fiscal" replace />;
+    return <Navigate to={`/configuracoes?tab=${getDefaultTab()}`} replace />;
   }
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Configurações</h2>
-        <p className="text-muted-foreground">Gerencie as definições do sistema</p>
+        <p className="text-muted-foreground">Gerencie as definições do sistema sistema web</p>
       </div>
 
       {tab === "fiscal" && <FiscalConfig />}
+      {tab === "dados-empresa" && <FiscalConfig />}
       {tab === "usuarios" && <UserManager />}
       {tab === "pdv" && <div className="max-w-2xl"><PDVConfig /></div>}
       {tab === "plano-contas" && <div className="max-w-4xl"><ChartOfAccountsManager /></div>}

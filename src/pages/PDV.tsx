@@ -24,7 +24,8 @@ import { useSaveSale } from "@/hooks/useSaveSale";
 import { useFiscal } from "@/hooks/useFiscal";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { printReceipt, getWhatsappUrl } from "@/utils/printReceipt";
+import { printReceipt, printReceiptA4, getWhatsappUrl } from "@/utils/printReceipt";
+import { useCustomers } from "@/hooks/useCustomers";
 
 interface CartItem {
   id: string;
@@ -68,6 +69,7 @@ export default function PDV() {
   const saveSale = useSaveSale();
   const emitFiscal = useFiscal();
   const { data: sellers = [] } = useSellers();
+  const { data: customersList = [] } = useCustomers();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -257,6 +259,7 @@ export default function PDV() {
     onPause: () => setPauseDialogOpen(true),
     onCheckout: handleOpenCheckout,
     onSaveToComanda: () => setSaveToComandaOpen(true),
+    maxDiscount: user?.max_discount
   };
 
   if (loadingRegister) {
@@ -444,6 +447,10 @@ export default function PDV() {
 
             const res = await saveSale.mutateAsync(payload);
             toast.success(`Venda #${res.sale_number} finalizada com sucesso!`);
+            const finalCustomerObj = customersList.find(c => c.id === finalCustomerId);
+            const finalCustomerName = finalCustomerObj?.name || (finalCustomerId ? "CLIENTE NÃO ENCONTRADO" : "CONSUMIDOR FINAL");
+            const finalCustomerDocument = finalCustomerObj?.cpf_cnpj || "";
+
             setLastSaleData({
               saleId: res.id,
               saleNumber: res.sale_number,
@@ -451,7 +458,9 @@ export default function PDV() {
               total: totalWithDiscount,
               discount: discountAmount,
               payments,
-              date: new Date()
+              date: new Date(),
+              customerName: finalCustomerName,
+              customerDocument: finalCustomerDocument
             });
             setReceiptOptionsOpen(true);
             setCart([]);
@@ -469,7 +478,12 @@ export default function PDV() {
         onOpenChange={setReceiptOptionsOpen}
         onEmitNFCe={() => {
           if (lastSaleData?.saleId) {
-            emitFiscal.mutate({ saleId: lastSaleData.saleId, model: '65' });
+            const promise = emitFiscal.mutateAsync({ saleId: lastSaleData.saleId, model: '65' });
+            toast.promise(promise, {
+              loading: "Transmitindo NFC-e para a SEFAZ...",
+              success: (data) => data.message || "NFC-e autorizada com sucesso!",
+              error: (err) => err.message || "Erro ao emitir NFC-e"
+            });
           }
           setReceiptOptionsOpen(false);
         }}
@@ -479,9 +493,16 @@ export default function PDV() {
           }
           setReceiptOptionsOpen(false);
         }}
-        onWhatsApp={() => {
+        onPrintA4={() => {
           if (lastSaleData) {
-            window.open(getWhatsappUrl(lastSaleData), '_blank');
+            printReceiptA4(lastSaleData);
+          }
+          setReceiptOptionsOpen(false);
+        }}
+        onWhatsApp={async () => {
+          if (lastSaleData) {
+            const url = await getWhatsappUrl(lastSaleData);
+            window.open(url, '_blank');
           }
           setReceiptOptionsOpen(false);
         }}

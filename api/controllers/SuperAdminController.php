@@ -68,6 +68,18 @@ class SuperAdminController extends ApiController {
             ':modules' => $modules
         ]);
 
+        // Criar formas de pagamento padrão
+        $fixedMethods = ['Dinheiro', 'Conta'];
+        foreach ($fixedMethods as $methodName) {
+            $mId = generateUUID();
+            $mStmt = $this->conn->prepare("INSERT INTO payment_methods (id, company_id, name, active, show_in_delivery) VALUES (:id, :cid, :name, 1, 1)");
+            $mStmt->execute([
+                ':id' => $mId,
+                ':cid' => $id,
+                ':name' => $methodName
+            ]);
+        }
+
         $this->jsonResponse(["message" => "Company created", "id" => $id]);
     }
 
@@ -104,13 +116,15 @@ class SuperAdminController extends ApiController {
         $user_id = substr($user_id, 0, 8) . "-" . substr($user_id, 8, 4) . "-" . substr($user_id, 12, 4) . "-" . substr($user_id, 16, 4) . "-" . substr($user_id, 20, 12);
         
         $password_hash = password_hash($data->password, PASSWORD_DEFAULT);
+        $max_discount = isset($data->max_discount) ? (float)$data->max_discount : 100.00;
 
-        $stmt = $this->conn->prepare("INSERT INTO users (id, email, password_hash, company_id) VALUES (:id, :email, :password_hash, :company_id)");
+        $stmt = $this->conn->prepare("INSERT INTO users (id, email, password_hash, company_id, max_discount) VALUES (:id, :email, :password_hash, :company_id, :max_discount)");
         $stmt->execute([
             ':id' => $user_id,
             ':email' => $data->email,
             ':password_hash' => $password_hash,
-            ':company_id' => $data->company_id
+            ':company_id' => $data->company_id,
+            ':max_discount' => $max_discount
         ]);
 
         // Role as admin of that company
@@ -141,7 +155,7 @@ class SuperAdminController extends ApiController {
     public function listCompanyUsers($company_id) {
         $this->checkSuperAdmin();
         $stmt = $this->conn->prepare("
-            SELECT u.id as user_id, u.email, p.full_name, p.phone, 
+            SELECT u.id as user_id, u.email, u.max_discount, p.full_name, p.phone, 
             (SELECT GROUP_CONCAT(role SEPARATOR ', ') FROM user_roles WHERE user_id = u.id) as roles
             FROM users u
             LEFT JOIN profiles p ON u.id = p.user_id
@@ -196,6 +210,11 @@ class SuperAdminController extends ApiController {
             if (!empty($data->password)) {
                 $updateFields[] = "password_hash = :pass";
                 $params[":pass"] = password_hash($data->password, PASSWORD_DEFAULT);
+            }
+
+            if (isset($data->max_discount)) {
+                $updateFields[] = "max_discount = :max_discount";
+                $params[":max_discount"] = (float)$data->max_discount;
             }
             
             if (!empty($updateFields)) {
@@ -252,5 +271,51 @@ class SuperAdminController extends ApiController {
         $stmt = $this->conn->prepare("DELETE FROM users WHERE id = :uid");
         $stmt->execute([':uid' => $user_id]);
         $this->jsonResponse(["message" => "Usuário removido"]);
+    }
+
+    public function deleteCompany($company_id) {
+        $this->checkSuperAdmin();
+        
+        if ($company_id === '1') {
+            $this->jsonResponse(["message" => "A empresa padrão não pode ser excluída."], 400);
+        }
+
+        try {
+            // Se já houver uma transação, não inicia outra
+            if (!$this->conn->inTransaction()) {
+                $this->conn->beginTransaction();
+            }
+
+            // Lista corrigida com base nas tabelas reais do banco
+            $tables = [
+                'users', 'products', 'sales', 'cash_registers', 'cash_movements', 
+                'customers', 'suppliers', 'sellers', 'comandas', 'purchases', 
+                'accounts_payable', 'accounts_receivable', 'chart_of_accounts', 
+                'config_fiscal', 'fiscal_notes', 'delivery_settings', 'delivery_neighborhoods',
+                'user_roles', 'user_module_permissions', 'profiles', 'nfe_rascunhos',
+                'naturezas_operacao', 'categories', 'payment_methods', 'delivery_orders'
+            ];
+
+            foreach ($tables as $table) {
+                try {
+                    $stmt = $this->conn->prepare("DELETE FROM $table WHERE company_id = :cid");
+                    $stmt->execute([':cid' => $company_id]);
+                } catch (\PDOException $e) {
+                    // Se a tabela não tiver a coluna company_id ou não existir, apenas pula
+                    // Log opcional para debug: error_log("Erro ao limpar tabela $table: " . $e->getMessage());
+                    continue;
+                }
+            }
+
+            // Finalmente exclui a empresa
+            $stmt = $this->conn->prepare("DELETE FROM companies WHERE id = :cid");
+            $stmt->execute([':cid' => $company_id]);
+
+            $this->conn->commit();
+            $this->jsonResponse(["message" => "Empresa e todos os seus dados foram excluídos com sucesso."]);
+        } catch (\Throwable $t) {
+            if ($this->conn->inTransaction()) $this->conn->rollBack();
+            $this->jsonResponse(["message" => "Erro ao excluir empresa: " . $t->getMessage()], 500);
+        }
     }
 }

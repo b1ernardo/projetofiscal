@@ -32,6 +32,19 @@ class CategoriesController extends ApiController {
         $this->jsonResponse(["message" => "Categoria criada com sucesso", "id" => $id], 201);
     }
 
+    public function update($id) {
+        $this->authenticate();
+        $data = $this->getPostData();
+
+        if (empty($data->name)) {
+            $this->jsonResponse(["message" => "Nome é obrigatório"], 400);
+        }
+
+        $stmt = $this->conn->prepare("UPDATE categories SET name = :name WHERE id = :id AND company_id = :company_id");
+        $stmt->execute([":name" => trim($data->name), ":id" => $id, ":company_id" => $this->company_id]);
+        $this->jsonResponse(["message" => "Categoria atualizada"]);
+    }
+
     public function delete($id) {
         $this->authenticate();
         try {

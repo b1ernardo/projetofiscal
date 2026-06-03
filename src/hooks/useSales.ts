@@ -64,6 +64,18 @@ export interface SaleDetail extends SaleListItem {
         method_name: string;
         amount: number;
     }>;
+    fiscal?: {
+        id: string;
+        tipo: 'NFE' | 'NFCE';
+        numero: number;
+        serie: number;
+        chave: string;
+        protocolo: string;
+        status: string;
+        fiscal_date: string;
+        qrCode?: string;
+        urlConsulta?: string;
+    } | null;
 }
 
 const fetchSales = async (filters: SalesFilters): Promise<SaleListItem[]> => {
