@@ -32,8 +32,13 @@ export interface ProductWithBoxConfigs {
   ipi_cst: string | null;
   ipi_aliquota: number | null;
   product_code: number | null;
+  icms_aliquota: number;
+  gross_weight: number;
   boxConfigs: BoxConfig[];
   venda_delivery: boolean;
+  cbs_regime: string;
+  is_incide: boolean;
+  is_aliquota: number;
   sub_group: string | null;
 }
 
@@ -84,6 +89,11 @@ async function fetchProducts(): Promise<ProductWithBoxConfigs[]> {
     ipi_cst: p.ipi_cst,
     ipi_aliquota: p.ipi_aliquota !== null ? Number(p.ipi_aliquota) : null,
     product_code: p.product_code !== null ? Number(p.product_code) : null,
+    icms_aliquota: Number(p.icms_aliquota || 0),
+    gross_weight: Number(p.gross_weight || 0),
+    cbs_regime: p.cbs_regime || 'padrao',
+    is_incide: Boolean(p.is_incide),
+    is_aliquota: Number(p.is_aliquota || 0),
     boxConfigs: (p.boxConfigs || []).map((bc: any) => ({
       label: bc.label,
       quantity: Number(bc.quantity),
@@ -125,8 +135,13 @@ interface SaveProductData {
   cofins_aliquota?: number;
   ipi_cst?: string;
   ipi_aliquota?: number;
+  icms_aliquota?: number;
+  gross_weight?: number;
   productCode?: number;
   boxConfigs: BoxConfig[];
+  cbs_regime?: string;
+  is_incide?: boolean;
+  is_aliquota?: number;
   venda_delivery: boolean;
   subGroup?: string;
 }
@@ -166,9 +181,14 @@ export function useSaveProduct() {
         cofins_aliquota: data.cofins_aliquota,
         ipi_cst: data.ipi_cst,
         ipi_aliquota: data.ipi_aliquota,
+        icms_aliquota: data.icms_aliquota,
+        gross_weight: data.gross_weight,
         product_code: data.productCode,
         boxConfigs: data.boxConfigs,
         venda_delivery: data.venda_delivery ? 1 : 0,
+        cbs_regime: data.cbs_regime || 'padrao',
+        is_incide: data.is_incide ? 1 : 0,
+        is_aliquota: data.is_aliquota || 0,
         sub_group: data.subGroup || null,
       };
 

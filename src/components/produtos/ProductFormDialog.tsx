@@ -36,7 +36,12 @@ interface ProductFormData {
   cofins_aliquota: number;
   ipi_cst: string;
   ipi_aliquota: number;
+  icms_aliquota: number;
+  gross_weight: number;
   boxConfigs: BoxConfig[];
+  cbs_regime: string;
+  is_incide: boolean;
+  is_aliquota: number;
   productCode?: number;
   venda_delivery: boolean;
   can_change_price: boolean;
@@ -77,7 +82,12 @@ const defaultData: ProductFormData = {
   cofins_aliquota: 0,
   ipi_cst: "53",
   ipi_aliquota: 0,
+  icms_aliquota: 0,
+  gross_weight: 0,
   boxConfigs: [],
+  cbs_regime: "padrao",
+  is_incide: false,
+  is_aliquota: 0,
   productCode: 0,
   venda_delivery: false,
   can_change_price: false,
@@ -406,6 +416,10 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
                       <Input value={form.cfop_padrao} onChange={(e) => updateField("cfop_padrao", e.target.value)} maxLength={4} />
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label>Peso Bruto (kg)</Label>
+                    <Input type="number" step="0.001" value={form.gross_weight} onChange={(e) => updateField("gross_weight", parseFloat(e.target.value) || 0)} />
+                  </div>
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-4">
@@ -466,6 +480,10 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
                         </SelectGroup>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Aliq. ICMS %</Label>
+                    <Input type="number" step="0.01" value={form.icms_aliquota} onChange={(e) => updateField("icms_aliquota", parseFloat(e.target.value) || 0)} />
                   </div>
                 </div>
               </div>
@@ -568,6 +586,50 @@ export function ProductFormDialog({ open, onOpenChange, onSave, initialData, tit
                     />
                   </div>
                 </div>
+              </div>
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold border-b pb-2 text-blue-700">Reforma Tributária — CBS / IBS / IS</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Regime CBS / IBS</Label>
+                    <Select value={form.cbs_regime} onValueChange={(v) => updateField("cbs_regime", v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="padrao">Padrão — alíquota cheia</SelectItem>
+                        <SelectItem value="reduzido_60">Reduzido 60% — alíquota reduzida (40% da cheia)</SelectItem>
+                        <SelectItem value="zero">Alíquota Zero</SelectItem>
+                        <SelectItem value="isento">Isento</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground">Alimentos, saúde e educação usam "Reduzido 60%". Cesta básica e transporte coletivo usam "Alíquota Zero".</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Imposto Seletivo (IS)</Label>
+                    <div className="flex items-center gap-3 pt-2">
+                      <input
+                        type="checkbox"
+                        id="is_incide"
+                        checked={form.is_incide}
+                        onChange={(e) => updateField("is_incide", e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <label htmlFor="is_incide" className="text-sm">Produto sujeito ao IS</label>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Tabaco, bebidas alcoólicas, veículos de combustão, agrotóxicos, armas.</p>
+                  </div>
+                </div>
+                {form.is_incide && (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Alíquota IS %</Label>
+                      <Input
+                        type="number" step="0.01" min="0" max="999"
+                        value={form.is_aliquota}
+                        onChange={(e) => updateField("is_aliquota", parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </TabsContent>
 

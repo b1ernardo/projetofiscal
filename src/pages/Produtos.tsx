@@ -378,10 +378,15 @@ export default function Produtos() {
     cofins_aliquota: p.cofins_aliquota ?? 0,
     ipi_cst: p.ipi_cst ?? "53",
     ipi_aliquota: p.ipi_aliquota ?? 0,
+    icms_aliquota: p.icms_aliquota ?? 0,
+    gross_weight: p.gross_weight ?? 0,
     productCode: p.product_code ?? 0,
     boxConfigs: p.boxConfigs,
     venda_delivery: p.venda_delivery ?? false,
     subGroup: p.sub_group ?? "",
+    cbs_regime: p.cbs_regime ?? "padrao",
+    is_incide: Boolean(p.is_incide),
+    is_aliquota: p.is_aliquota ?? 0,
   });
 
   return (
