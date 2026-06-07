@@ -59,6 +59,7 @@ export function FiscalConfig() {
   const [fetching, setFetching] = useState(true);
   const [certificadoBase64, setCertificadoBase64] = useState<string | null>(null);
   const [buscandoCep, setBuscandoCep] = useState(false);
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false);
 
   // Naturezas
   const [novaNatureza, setNovaNatureza] = useState("");
@@ -119,6 +120,34 @@ export function FiscalConfig() {
       }
     } catch { toast.error("Erro ao carregar configurações fiscais"); }
     finally { setFetching(false); }
+  };
+
+  const buscarCnpj = async (cnpj: string) => {
+    const digits = cnpj.replace(/\D/g, "");
+    if (digits.length !== 14) return;
+    setBuscandoCnpj(true);
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`);
+      if (!res.ok) { toast.error("CNPJ não encontrado ou inválido."); return; }
+      const d = await res.json();
+
+      form.setValue("razao_social",  d.razao_social   || "");
+      form.setValue("nome_fantasia", d.nome_fantasia  || "");
+      form.setValue("logradouro",    d.logradouro     || "");
+      form.setValue("numero",        d.numero         || "");
+      form.setValue("bairro",        d.bairro         || "");
+      form.setValue("municipio",     d.municipio      || "");
+      form.setValue("uf",            d.uf             || "");
+      form.setValue("cep",           (d.cep || "").replace(/\D/g, ""));
+      form.setValue("cod_municipio", String(d.codigo_municipio_ibge || ""));
+      if (d.ddd_telefone_1) form.setValue("fone", d.ddd_telefone_1.replace(/\D/g, ""));
+
+      toast.success("Dados da empresa preenchidos automaticamente.");
+    } catch {
+      toast.error("Erro ao buscar CNPJ. Verifique sua conexão.");
+    } finally {
+      setBuscandoCnpj(false);
+    }
   };
 
   const buscarCep = async (cep: string) => {
@@ -207,7 +236,27 @@ export function FiscalConfig() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField control={form.control} name="cnpj" render={({ field }) => (
-                  <FormItem><FormLabel>CNPJ (Apenas números)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem>
+                    <FormLabel>CNPJ (Apenas números)</FormLabel>
+                    <div className="relative">
+                      <FormControl>
+                        <Input
+                          {...field}
+                          maxLength={14}
+                          placeholder="00000000000000"
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, "");
+                            field.onChange(v);
+                            if (v.length === 14) buscarCnpj(v);
+                          }}
+                        />
+                      </FormControl>
+                      {buscandoCnpj && (
+                        <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
                 )} />
                 <FormField control={form.control} name="ie" render={({ field }) => (
                   <FormItem><FormLabel>Inscrição Estadual</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
