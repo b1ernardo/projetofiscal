@@ -58,6 +58,7 @@ export function FiscalConfig() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [certificadoBase64, setCertificadoBase64] = useState<string | null>(null);
+  const [buscandoCep, setBuscandoCep] = useState(false);
 
   // Naturezas
   const [novaNatureza, setNovaNatureza] = useState("");
@@ -118,6 +119,27 @@ export function FiscalConfig() {
       }
     } catch { toast.error("Erro ao carregar configurações fiscais"); }
     finally { setFetching(false); }
+  };
+
+  const buscarCep = async (cep: string) => {
+    const digits = cep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    setBuscandoCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await res.json();
+      if (data.erro) { toast.error("CEP não encontrado."); return; }
+      form.setValue("logradouro", data.logradouro || "");
+      form.setValue("bairro",     data.bairro     || "");
+      form.setValue("municipio",  data.localidade  || "");
+      form.setValue("uf",         data.uf          || "");
+      form.setValue("cod_municipio", data.ibge     || "");
+      toast.success("Endereço preenchido automaticamente.");
+    } catch {
+      toast.error("Erro ao buscar CEP. Verifique sua conexão.");
+    } finally {
+      setBuscandoCep(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -195,7 +217,27 @@ export function FiscalConfig() {
                 )} />
                 <div className="grid grid-cols-[1fr_2fr] gap-4">
                   <FormField control={form.control} name="cep" render={({ field }) => (
-                    <FormItem><FormLabel>CEP</FormLabel><FormControl><Input {...field} maxLength={8} placeholder="Apenas números" /></FormControl><FormMessage /></FormItem>
+                    <FormItem>
+                      <FormLabel>CEP</FormLabel>
+                      <div className="relative">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            maxLength={8}
+                            placeholder="Apenas números"
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, "");
+                              field.onChange(v);
+                              if (v.length === 8) buscarCep(v);
+                            }}
+                          />
+                        </FormControl>
+                        {buscandoCep && (
+                          <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
                   )} />
                   <FormField control={form.control} name="bairro" render={({ field }) => (
                     <FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
