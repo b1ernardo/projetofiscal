@@ -23,7 +23,7 @@ export default function Configuracoes() {
       case "pagamentos": return hasPermission("finances");
       case "delivery": return hasPermission("delivery");
       case "fiscal": return hasPermission("fiscal");
-      case "dados-empresa": return hasPermission("dados_empresa") || hasPermission("fiscal") || hasPermission("configuracoes");
+      case "dados-empresa": return true; // redireciona para fiscal
       case "usuarios": return true;
       default: return true;
     }
@@ -40,7 +40,6 @@ export default function Configuracoes() {
   }, [tab]);
 
   const getDefaultTab = () => {
-    if (hasPermission("dados_empresa")) return "dados-empresa";
     if (hasPermission("fiscal")) return "fiscal";
     return "usuarios";
   };
@@ -56,8 +55,7 @@ export default function Configuracoes() {
         <p className="text-muted-foreground">Gerencie as definições do sistema sistema web</p>
       </div>
 
-      {tab === "fiscal" && <FiscalConfig />}
-      {tab === "dados-empresa" && <FiscalConfig />}
+      {(tab === "fiscal" || tab === "dados-empresa") && <FiscalConfig />}
       {tab === "usuarios" && <UserManager />}
       {tab === "pdv" && <div className="max-w-2xl"><PDVConfig /></div>}
       {tab === "plano-contas" && <div className="max-w-4xl"><ChartOfAccountsManager /></div>}

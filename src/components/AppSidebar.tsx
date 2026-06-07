@@ -85,6 +85,7 @@ const systemItems: MenuItem[] = [
       { title: "Vendas por Clientes", url: "/relatorios?tab=vendas-clientes" },
       { title: "Vendas por Vendedor", url: "/relatorios?tab=vendas-vendedor" },
       { title: "Lucratividade", url: "/relatorios?tab=lucratividade" },
+      { title: "Plano de Contas", url: "/relatorios?tab=plano-contas" },
     ],
   },
   {
@@ -93,8 +94,7 @@ const systemItems: MenuItem[] = [
     icon: Settings,
     permission: "configuracoes",
     subItems: [
-      { title: "Dados da Empresa", url: "/configuracoes?tab=dados-empresa" },
-      { title: "Dados Fiscais", url: "/configuracoes?tab=fiscal" },
+      { title: "Dados da Empresa / Fiscal", url: "/configuracoes?tab=fiscal" },
       { title: "Usuários", url: "/configuracoes?tab=usuarios" },
       { title: "Opções PDV", url: "/configuracoes?tab=pdv" },
       { title: "Formas de Pagamento", url: "/configuracoes?tab=pagamentos" },
@@ -183,7 +183,7 @@ function SidebarItem({ item, location }: { item: MenuItem; location: ReturnType<
 }
 
 export function AppSidebar() {
-  const { profile, roles, signOut, hasPermission } = useAuth();
+  const { profile, roles, signOut } = useAuth();
 
   const roleLabel = roles.includes("super_admin")
     ? "Super Admin"
