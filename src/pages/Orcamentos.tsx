@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -38,6 +38,13 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 export default function Orcamentos() {
     const navigate = useNavigate();
@@ -55,6 +62,30 @@ export default function Orcamentos() {
             });
             if (!res.ok) throw new Error("Erro ao buscar orçamentos");
             return res.json();
+        },
+    });
+
+    const queryClient = useQueryClient();
+
+    const updateStatusMutation = useMutation({
+        mutationFn: async ({ id, status }: { id: string; status: string }) => {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/quotes/${id}/status`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+                },
+                body: JSON.stringify({ status }),
+            });
+            if (!res.ok) throw new Error("Erro ao atualizar status");
+            return res.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["quotes"] });
+            toast.success("Status atualizado com sucesso!");
+        },
+        onError: (error: any) => {
+            toast.error(error.message);
         },
     });
 
@@ -211,17 +242,38 @@ export default function Orcamentos() {
                                             </span>
                                         </TableCell>
                                         <TableCell>
-                                            {isExpired ? (
-                                                <Badge variant="destructive">Expirado</Badge>
-                                            ) : quote.status === 'pending' ? (
-                                                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pendente</Badge>
-                                            ) : quote.status === 'authorized' ? (
-                                                <Badge className="bg-blue-50 text-blue-700 border-blue-200">Autorizado</Badge>
-                                            ) : quote.status === 'converted' ? (
-                                                <Badge className="bg-green-50 text-green-700 border-green-200">Vendido</Badge>
-                                            ) : (
-                                                <Badge variant="secondary">{quote.status}</Badge>
-                                            )}
+                                            <Select
+                                                defaultValue={isExpired ? 'expired' : quote.status}
+                                                onValueChange={(value) => {
+                                                    if (value !== 'expired') {
+                                                        updateStatusMutation.mutate({ id: quote.id, status: value });
+                                                    }
+                                                }}
+                                                disabled={updateStatusMutation.isPending}
+                                            >
+                                                <SelectTrigger className="h-8 w-[130px] border-0 bg-transparent p-0 flex justify-start hover:bg-slate-100 rounded focus:ring-0 focus:ring-offset-0">
+                                                    {isExpired ? (
+                                                        <Badge variant="destructive">Expirado</Badge>
+                                                    ) : quote.status === 'pending' ? (
+                                                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pendente</Badge>
+                                                    ) : quote.status === 'authorized' ? (
+                                                        <Badge className="bg-blue-50 text-blue-700 border-blue-200">Autorizado</Badge>
+                                                    ) : quote.status === 'converted' ? (
+                                                        <Badge className="bg-green-50 text-green-700 border-green-200">Vendido</Badge>
+                                                    ) : quote.status === 'cancelled' ? (
+                                                        <Badge variant="destructive">Cancelado</Badge>
+                                                    ) : (
+                                                        <Badge variant="secondary">{quote.status}</Badge>
+                                                    )}
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="pending">Pendente</SelectItem>
+                                                    <SelectItem value="authorized">Autorizado</SelectItem>
+                                                    <SelectItem value="converted">Vendido (Convertido)</SelectItem>
+                                                    <SelectItem value="cancelled">Cancelado</SelectItem>
+                                                    {isExpired && <SelectItem value="expired" disabled>Expirado</SelectItem>}
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell>
                                             <DropdownMenu>

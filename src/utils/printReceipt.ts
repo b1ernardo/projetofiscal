@@ -177,10 +177,10 @@ export const getQuoteWhatsappUrl = async (data: QuoteData) => {
 export const printComandaItem = (comandaId: string, itemName: string, quantity: number, observation?: string) => {
   const date = new Date().toLocaleString('pt-BR');
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
-    <style>body{font-family:'Courier New',monospace;font-size:14px;margin:0;padding:10px;max-width:300px;color:#000}
+    <style>body{font-family:'Courier New',monospace;font-size:15px;font-weight:bold;margin:0;padding:10px;max-width:300px;color:#000}
     @media print{@page{margin:0}body{margin:0;padding:10px}}.text-center{text-align:center}
     .divider{border-top:1px dashed #000;margin:10px 0}</style></head><body>
-    <div class="text-center"><strong style="font-size:16px">NOVO PEDIDO</strong></div>
+    <div class="text-center"><strong style="font-size:18px">NOVO PEDIDO</strong></div>
     <div class="divider"></div>
     <div><strong>Comanda:</strong> ${comandaId}<br/><strong>Data/Hora:</strong> ${date}</div>
     <div class="divider"></div>
@@ -195,10 +195,10 @@ export const printComandaItem = (comandaId: string, itemName: string, quantity: 
 export const printComandaBatch = (comandaId: string, items: any[], mesa?: string) => {
   const date = new Date().toLocaleString('pt-BR');
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
-    <style>body{font-family:'Courier New',monospace;font-size:14px;margin:0;padding:10px;max-width:300px;color:#000}
+    <style>body{font-family:'Courier New',monospace;font-size:15px;font-weight:bold;margin:0;padding:10px;max-width:300px;color:#000}
     @media print{@page{margin:0}body{margin:0;padding:10px}}.text-center{text-align:center}
     .divider{border-top:1px dashed #000;margin:10px 0}</style></head><body>
-    <div class="text-center"><strong style="font-size:16px">NOVO PEDIDO</strong></div>
+    <div class="text-center"><strong style="font-size:18px">NOVO PEDIDO</strong></div>
     <div class="divider"></div>
     <div><strong>Local:</strong> ${mesa || comandaId}<br/><strong>Data/Hora:</strong> ${date}</div>
     <div class="divider"></div>
@@ -238,7 +238,7 @@ export const printReceipt = async (data: ReceiptData, preOpenedWindow?: Window |
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
   <title>Venda #${saleNumber}</title>
   <style>
-    body{font-family:'Courier New',monospace;font-size:11px;margin:0;padding:0;max-width:300px;color:#000;background:#fff}
+    body{font-family:'Courier New',monospace;font-size:13px;font-weight:bold;margin:0;padding:0;max-width:300px;color:#000;background:#fff}
     @media print{@page{margin:0}body{margin:0;padding:5px}.no-print{display:none!important}}
     .tc{text-align:center}.tr{text-align:right}.tl{text-align:left}
     .dv{border-top:1px dashed #000;margin:5px 0}
@@ -257,10 +257,10 @@ export const printReceipt = async (data: ReceiptData, preOpenedWindow?: Window |
   
   <div class="tc" style="margin-top:10px">
     ${logoSrc ? `<img src="${logoSrc}" style="width:120px;max-height:80px;object-fit:contain" onerror="this.style.display='none'"/>` : ''}
-    <div style="line-height:1.2;margin-top:5px">
-      <strong style="font-size:12px">${companyName}</strong><br/>
-      <span class="text-xs">${companyAddress}</span><br/>
-      <span class="text-xs">${companyCnpjIe}</span>
+    <div style="line-height:1.4;margin-top:5px">
+      <strong style="font-size:16px">${companyName}</strong><br/>
+      <span style="font-size:12px">${companyAddress}</span><br/>
+      <span style="font-size:12px">${companyCnpjIe}</span>
     </div>
   </div>
 
@@ -382,7 +382,7 @@ export const printReceiptA4 = async (data: ReceiptData) => {
   const { customerName, customerDocument } = data;
   const subtotal = data.cart.reduce((a, i) => a + i.price * i.quantity, 0);
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Venda #${data.saleNumber} - A4</title>
-  <style>body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#333}
+  <style>body{font-family:'Segoe UI',Arial,sans-serif;font-size:14px;font-weight:bold;padding:20px;color:#333}
   .container{max-width:800px;margin:0 auto;border:1px solid #ddd;padding:20px;border-radius:8px}
   .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:20px}
   table{width:100%;border-collapse:collapse;margin-top:20px}
@@ -431,7 +431,7 @@ export const printQuote = async (data: QuoteData) => {
   const totalItems = cart.reduce((a, i) => a + Number(i.quantity), 0);
   const subtotal = cart.reduce((a, i) => a + i.price * i.quantity, 0);
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Orçamento - ${customerName}</title>
-  <style>body{font-family:'Courier New',monospace;font-size:12px;margin:0;padding:0;max-width:300px;color:#000}
+  <style>body{font-family:'Courier New',monospace;font-size:13px;font-weight:bold;margin:0;padding:0;max-width:300px;color:#000}
   @media print{@page{margin:0}body{margin:0;padding:0}.no-print{display:none!important}}
   .tc{text-align:center}.tr{text-align:right}.tl{text-align:left}
   .dv{border-top:1px dashed #000;margin:5px 0}
@@ -443,11 +443,11 @@ export const printQuote = async (data: QuoteData) => {
   <div style="display:flex;align-items:center;gap:10px;margin:8px 4px">
     ${logoSrc ? `<img src="${logoSrc}" style="width:55px;height:55px;object-fit:contain" onerror="this.style.display='none'"/>` : ''}
     <div style="line-height:1.3">
-      <strong style="font-size:13px;color:#003366">${companyName}</strong><br/>
-      <span style="font-size:9px;color:#003366">${companyAddress}<br/>${companyCnpjIe}</span>
+      <strong style="font-size:16px;color:#003366">${companyName}</strong><br/>
+      <span style="font-size:12px;color:#003366">${companyAddress}<br/>${companyCnpjIe}</span>
     </div>
   </div>
-  <div class="tc"><strong style="font-size:16px">O R Ç A M E N T O</strong></div>
+  <div class="tc"><strong style="font-size:17px">O R Ç A M E N T O</strong></div>
   <div class="dv"></div>
   <div style="font-size:11px">Cliente: ${customerName}${customerDocument ? `<br/>CPF/CNPJ: ${customerDocument}` : ''}<br/>Data: ${new Date(date).toLocaleDateString('pt-BR')}<br/>Validade: ${validityDays} dias</div>
   <div class="dv"></div>
@@ -477,7 +477,7 @@ export const printQuoteA4 = async (data: QuoteData) => {
   <title>Orçamento - ${data.customerName}</title>
   <style>
     @page { size: A4; margin: 15mm; }
-    body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1e293b; margin: 0; padding: 0; background: #fff; line-height: 1.5; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; font-weight: bold; color: #1e293b; margin: 0; padding: 0; background: #fff; line-height: 1.5; }
     .page { max-width: 210mm; margin: 0 auto; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 2px solid #334155; margin-bottom: 30px; }
     .company-info { display: flex; gap: 20px; align-items: center; }
@@ -630,7 +630,7 @@ export const printDelivery = async (data: DeliveryData) => {
   const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
   const { orderNumber, customerName, customerDocument, customerPhone, address, type, paymentMethod, items, subtotal, deliveryFee, total, changeFor, date } = data;
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pedido #${orderNumber}</title>
-  <style>body{font-family:'Courier New',monospace;font-size:12px;margin:0;padding:0;max-width:300px;color:#000}
+  <style>body{font-family:'Courier New',monospace;font-size:13px;font-weight:bold;margin:0;padding:0;max-width:300px;color:#000}
   @media print{@page{margin:0}body{margin:0;padding:0}.no-print{display:none!important}}
   .tc{text-align:center}.tr{text-align:right}.tl{text-align:left}
   .dv{border-top:1px dashed #000;margin:5px 0}
@@ -641,8 +641,8 @@ export const printDelivery = async (data: DeliveryData) => {
   <div style="display:flex;align-items:center;gap:10px;margin:8px 4px">
     <img src="${logoSrc}" style="width:55px;height:55px;object-fit:contain" onerror="this.style.display='none'"/>
     <div style="line-height:1.3">
-      <strong style="font-size:13px;color:#003366">${companyName}</strong><br/>
-      <span style="font-size:9px;color:#003366">${companyAddress}<br/>${companyCnpjIe}</span>
+      <strong style="font-size:16px;color:#003366">${companyName}</strong><br/>
+      <span style="font-size:12px;color:#003366">${companyAddress}<br/>${companyCnpjIe}</span>
     </div>
   </div>
   <div class="tc"><strong style="font-size:14px">COMPROVANTE DE ${type==='retirada'?'RETIRADA':'ENTREGA'}</strong><br/>Pedido #${orderNumber}</div>
@@ -681,7 +681,7 @@ export const printDeliveryA4 = async (data: DeliveryData) => {
   const { companyName, companyAddress, companyCnpjIe, logoSrc } = await resolveCompany();
   const { orderNumber, customerName, customerDocument, customerPhone, address, type, paymentMethod, items, subtotal, deliveryFee, total, changeFor, date } = data;
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Delivery #${orderNumber}</title>
-  <style>body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#333}
+  <style>body{font-family:'Segoe UI',Arial,sans-serif;font-size:14px;font-weight:bold;padding:20px;color:#333}
   .container{max-width:800px;margin:0 auto;border:1px solid #ddd;padding:20px;border-radius:8px}
   .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:20px}
   table{width:100%;border-collapse:collapse;margin-top:20px}
@@ -770,7 +770,7 @@ export const printSO_A4 = async (data: ServiceOrderData) => {
     </div>`;
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS #${osNum}</title>
-  <style>@page{size:A4;margin:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:8.5pt;color:#333;margin:0;padding:0}
+  <style>@page{size:A4;margin:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:10pt;font-weight:bold;color:#333;margin:0;padding:0}
   .copy{width:210mm;height:148mm;padding:8mm;box-sizing:border-box;overflow:hidden;position:relative}
   .copy:first-child{border-bottom:2px dashed #999}
   .via{position:absolute;top:8mm;right:8mm;font-size:7pt;color:#aaa;text-transform:uppercase;font-weight:bold}

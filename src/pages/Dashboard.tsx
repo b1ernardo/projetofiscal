@@ -17,7 +17,13 @@ const quickActions = [
   { title: "Estoque", icon: Warehouse, url: "/estoque", color: "bg-cyan-500", permission: "stock" },
 ];
 
-const PERIODS = ["Mês atual", "Últimos 12 meses"] as const;
+const PERIODS = ["Dia atual", "Mês atual", "Últimos 12 meses"] as const;
+
+const PERIOD_PARAM: Record<string, string> = {
+  "Dia atual": "dia",
+  "Mês atual": "mes",
+  "Últimos 12 meses": "ano",
+};
 
 // Colorful card configs matching PowerStock
 const STAT_CONFIGS = [
@@ -31,12 +37,13 @@ const STAT_CONFIGS = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
-  const [period, setPeriod] = useState<typeof PERIODS[number]>("Mês atual");
+  const [period, setPeriod] = useState<typeof PERIODS[number]>("Dia atual");
 
-  const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
+  const { data: stats, refetch: refetchStats } = useQuery({
+    queryKey: ["dashboard-stats", period],
     queryFn: async () => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/reports/dashboard`, {
+      const p = PERIOD_PARAM[period] ?? "dia";
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/reports/dashboard?period=${p}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` },
       });
       if (!response.ok) throw new Error("Falha ao carregar estatísticas");
@@ -94,7 +101,7 @@ export default function Dashboard() {
           </div>
           <span className="hidden sm:block text-xs text-muted-foreground">
             Dados de {dateLabel} às {timeLabel}h.{" "}
-            <button className="text-primary hover:underline font-medium">Atualizar agora</button>
+            <button className="text-primary hover:underline font-medium" onClick={() => refetchStats()}>Atualizar agora</button>
           </span>
         </div>
       </div>

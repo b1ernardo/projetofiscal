@@ -258,7 +258,7 @@ export default function Caixa() {
                               className="bg-green-50 text-green-700 border-green-200 whitespace-nowrap cursor-pointer hover:bg-green-100 transition-colors"
                               onClick={() => {
                                 if (m.saleData?.fiscal_note_id) {
-                                  window.open(`${import.meta.env.VITE_API_URL}/fiscal/danfe/${m.saleData.fiscal_note_id}`, "_blank");
+                                  window.open(`${import.meta.env.VITE_API_URL}/fiscal/danfe/${m.saleData.fiscal_note_id}?token=${encodeURIComponent(localStorage.getItem('auth_token') ?? '')}&t=${Date.now()}`, "_blank");
                                 }
                               }}
                               title="Clique para ver o DANFE"

@@ -273,6 +273,25 @@ class SuperAdminController extends ApiController {
         $this->jsonResponse(["message" => "Usuário removido"]);
     }
 
+    public function toggleCompanyActive($id) {
+        $this->checkSuperAdmin();
+
+        $stmt = $this->conn->prepare("SELECT active, name FROM companies WHERE id = :id");
+        $stmt->execute([':id' => $id]);
+        $company = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$company) {
+            $this->jsonResponse(["message" => "Empresa não encontrada"], 404);
+        }
+
+        $newActive = $company['active'] ? 0 : 1;
+        $this->conn->prepare("UPDATE companies SET active = :active WHERE id = :id")
+            ->execute([':active' => $newActive, ':id' => $id]);
+
+        $msg = $newActive ? "Empresa \"{$company['name']}\" ativada com sucesso" : "Empresa \"{$company['name']}\" bloqueada com sucesso";
+        $this->jsonResponse(["message" => $msg, "active" => (bool)$newActive]);
+    }
+
     public function deleteCompany($company_id) {
         $this->checkSuperAdmin();
         

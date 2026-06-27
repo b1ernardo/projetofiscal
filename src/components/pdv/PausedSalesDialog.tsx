@@ -15,10 +15,10 @@ interface CartItem {
 }
 
 interface PausedSale {
-  id: number;
+  id: string;        // UUID from DB
   items: CartItem[];
   total: number;
-  pausedAt: Date;
+  paused_at: string; // ISO string from DB
   label: string;
   observation: string;
 }
@@ -28,7 +28,7 @@ interface PausedSalesDialogProps {
   onOpenChange: (open: boolean) => void;
   pausedSales: PausedSale[];
   onResume: (sale: PausedSale) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: string) => void;
   formatCurrency: (v: number) => string;
 }
 
@@ -67,7 +67,7 @@ export function PausedSalesDialog({ open, onOpenChange, pausedSales, onResume, o
                   </p>
                 )}
                 <div className="text-xs text-muted-foreground">
-                  Pausada em {sale.pausedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  Pausada em {new Date(sale.paused_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                 </div>
               </div>
             ))

@@ -24,13 +24,14 @@ interface SaveSaleParams {
   discount?: number;
   customerId?: string;
   sellerId?: string;
+  quoteId?: string;
 }
 
 export function useSaveSale() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ cart, total, payments, userId, discount = 0, customerId, sellerId }: SaveSaleParams) => {
+    mutationFn: async ({ cart, total, payments, userId, discount = 0, customerId, sellerId, quoteId }: SaveSaleParams) => {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/sales`, {
         method: 'POST',
         headers: {
@@ -44,7 +45,8 @@ export function useSaveSale() {
           userId,
           discount,
           customerId,
-          sellerId
+          sellerId,
+          quoteId
         }),
       });
 
@@ -61,6 +63,7 @@ export function useSaveSale() {
       queryClient.invalidateQueries({ queryKey: ["products-with-configs"] });
       queryClient.invalidateQueries({ queryKey: ["stock-products"] });
       queryClient.invalidateQueries({ queryKey: ["sales"] });
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
       queryClient.invalidateQueries({ queryKey: ["today-sales"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["cash-register"] });

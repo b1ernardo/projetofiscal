@@ -28,6 +28,7 @@ class ComandasController extends ApiController {
                     'id' => $row['id'],
                     'table_number' => $row['table_number'],
                     'customer_name' => $row['customer_name'],
+                    'observation' => $row['observation'],
                     'status' => $row['status'],
                     'created_by' => $row['created_by'],
                     'seller_id' => $row['seller_id'],
@@ -72,6 +73,7 @@ class ComandasController extends ApiController {
             'id' => $rows[0]['id'],
             'table_number' => $rows[0]['table_number'],
             'customer_name' => $rows[0]['customer_name'],
+            'observation' => $rows[0]['observation'],
             'status' => $rows[0]['status'],
             'created_by' => $rows[0]['created_by'],
             'created_at' => $rows[0]['created_at'],
@@ -99,30 +101,35 @@ class ComandasController extends ApiController {
         $auth = $this->authenticate();
         $data = $this->getPostData();
 
-        $id = generateUUID();
-        $stmt = $this->conn->prepare("INSERT INTO comandas (id, company_id, table_number, customer_name, seller_id, status, created_by) VALUES (:id, :company_id, :table, :customer, :seller_id, 'open', :uid)");
-        $stmt->execute([
-            ":id" => $id,
-            ":company_id" => $this->company_id,
-            ":table" => $data->table_number ?? null,
-            ":customer" => $data->customer_name ?? null,
-            ":seller_id" => $data->seller_id ?? null,
-            ":uid" => $auth['id']
-        ]);
-
-        $this->jsonResponse(["message" => "Comanda aberta com sucesso", "id" => $id], 201);
+        try {
+            $id = generateUUID();
+            $stmt = $this->conn->prepare("INSERT INTO comandas (id, company_id, table_number, customer_name, observation, seller_id, status, created_by) VALUES (:id, :company_id, :table, :customer, :observation, :seller_id, 'open', :uid)");
+            $stmt->execute([
+                ":id" => $id,
+                ":company_id" => $this->company_id,
+                ":table" => $data->table_number ?? null,
+                ":customer" => $data->customer_name ?? null,
+                ":observation" => isset($data->observation) ? $data->observation : null,
+                ":seller_id" => $data->seller_id ?? null,
+                ":uid" => $auth['id']
+            ]);
+            $this->jsonResponse(["message" => "Comanda aberta com sucesso", "id" => $id], 201);
+        } catch (\Throwable $e) {
+            $this->jsonResponse(["message" => $e->getMessage()], 500);
+        }
     }
 
     public function update($id) {
         $this->authenticate();
         $data = $this->getPostData();
 
-        $stmt = $this->conn->prepare("UPDATE comandas SET table_number = :table, customer_name = :customer, seller_id = :seller_id WHERE id = :id AND company_id = :company_id");
+        $stmt = $this->conn->prepare("UPDATE comandas SET table_number = :table, customer_name = :customer, observation = :observation, seller_id = :seller_id WHERE id = :id AND company_id = :company_id");
         $stmt->execute([
             ":id" => $id,
             ":company_id" => $this->company_id,
             ":table" => $data->table_number ?? null,
             ":customer" => $data->customer_name ?? null,
+            ":observation" => $data->observation ?? null,
             ":seller_id" => $data->seller_id ?? null
         ]);
 
@@ -285,11 +292,17 @@ class ComandasController extends ApiController {
             }
 
             // 2. Create Sale
-            $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, customer_id, seller_id, total_amount, payment_method, created_by, status) 
-                                          VALUES (:id, :company_id, :customer_id, :seller_id, :total, :method, :uid, 'completed')");
+            // Calcular próximo número da venda POR EMPRESA
+            $stmtNum = $this->conn->prepare("SELECT COALESCE(MAX(sale_number), 0) + 1 FROM sales WHERE company_id = :company_id FOR UPDATE");
+            $stmtNum->execute([':company_id' => $this->company_id]);
+            $saleNumber = (int)$stmtNum->fetchColumn();
+
+            $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, sale_number, customer_id, seller_id, total_amount, payment_method, created_by, status) 
+                                          VALUES (:id, :company_id, :sale_number, :customer_id, :seller_id, :total, :method, :uid, 'completed')");
             $stmt->execute([
                 ":id" => $saleId,
                 ":company_id" => $this->company_id,
+                ":sale_number" => $saleNumber,
                 ":customer_id" => $data->customerId ?? $comandaData['customer_id'] ?? null,
                 ":seller_id" => $data->sellerId ?? $comandaData['seller_id'] ?? null,
                 ":total" => $data->total,

@@ -27,6 +27,7 @@ interface FiscalNote {
     protocolo: string | null;
     motivo_rejeicao: string | null;
     created_at: string;
+    data_emissao: string | null;
     sale_number: number | null;
     customer_name: string | null;
     total_amount: number | null;
@@ -41,9 +42,11 @@ interface Rascunho {
     updated_at: string;
 }
 
-const fetchNotes = async (tipo: string, search: string): Promise<FiscalNote[]> => {
+const fetchNotes = async (tipo: string, search: string, startDate: string, endDate: string): Promise<FiscalNote[]> => {
     const params = new URLSearchParams({ tipo });
     if (search) params.append("search", search);
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
     const res = await fetch(`${API}/fiscal/notas?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token()}` },
     });
@@ -76,14 +79,16 @@ export default function NotasFiscais({ tipo }: { tipo: "NFE" | "NFCE" }) {
     const [activeTab, setActiveTab] = useState<"transmitidas" | "rascunhos">("transmitidas");
     const [search, setSearch] = useState("");
     const [searchInput, setSearchInput] = useState("");
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
     const [cancelDialog, setCancelDialog] = useState<{ open: boolean; note: FiscalNote | null }>({ open: false, note: null });
     const [justificativa, setJustificativa] = useState("");
     const queryClient = useQueryClient();
     const navigate = useNavigate();
 
     const { data: notes = [], isLoading, refetch } = useQuery({
-        queryKey: ["fiscal-notes", tipo, search],
-        queryFn: () => fetchNotes(tipo, search),
+        queryKey: ["fiscal-notes", tipo, search, startDate, endDate],
+        queryFn: () => fetchNotes(tipo, search, startDate, endDate),
     });
 
     const { data: rascunhos = [], refetch: refetchRascunhos } = useQuery({
@@ -125,11 +130,11 @@ export default function NotasFiscais({ tipo }: { tipo: "NFE" | "NFCE" }) {
     });
 
     const handleDanfe = (noteId: string) => {
-        window.open(`${API}/fiscal/danfe/${noteId}?token=${token()}&t=${Date.now()}`, "_blank");
+        window.open(`${API}/fiscal/danfe/${noteId}?token=${encodeURIComponent(token() ?? '')}&t=${Date.now()}`, "_blank");
     };
 
     const handleXml = (noteId: string) => {
-        window.open(`${API}/fiscal/xml/${noteId}?token=${token()}&t=${Date.now()}`, "_blank");
+        window.open(`${API}/fiscal/xml/${noteId}?token=${encodeURIComponent(token() ?? '')}&t=${Date.now()}`, "_blank");
     };
 
     const handleThermal = async (saleId: string) => {
@@ -232,6 +237,18 @@ export default function NotasFiscais({ tipo }: { tipo: "NFE" | "NFCE" }) {
                         <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{rascunhos.length}</p>
                     </CardContent>
                 </Card>
+                <Card className="border-primary/30">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-primary flex items-center gap-1">
+                            Valor Total
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-3xl font-bold">
+                            {total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </p>
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Tabs */}
@@ -256,23 +273,38 @@ export default function NotasFiscais({ tipo }: { tipo: "NFE" | "NFCE" }) {
                     <Card>
                         <CardContent className="pt-4">
                             <div className="flex gap-3 flex-wrap">
-                                <div className="flex-1 min-w-[200px] flex gap-2">
-                                    <Input
-                                        placeholder="Buscar por número, chave ou cliente..."
-                                        value={searchInput}
-                                        onChange={e => setSearchInput(e.target.value)}
-                                        onKeyDown={e => e.key === "Enter" && setSearch(searchInput)}
-                                        className="h-9"
-                                    />
-                                    <Button size="sm" onClick={() => setSearch(searchInput)} className="gap-1">
-                                        <Search className="h-4 w-4" />
-                                    </Button>
-                                    {search && (
-                                        <Button size="sm" variant="ghost" onClick={() => { setSearch(""); setSearchInput(""); }}>
-                                            Limpar
+                                    <div className="flex-1 min-w-[200px] flex gap-2">
+                                        <Input
+                                            placeholder="Buscar por número, chave ou cliente..."
+                                            value={searchInput}
+                                            onChange={e => setSearchInput(e.target.value)}
+                                            onKeyDown={e => e.key === "Enter" && setSearch(searchInput)}
+                                            className="h-9"
+                                        />
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                type="date"
+                                                value={startDate}
+                                                onChange={e => setStartDate(e.target.value)}
+                                                className="h-9 w-40"
+                                            />
+                                            <span className="text-xs text-muted-foreground">até</span>
+                                            <Input
+                                                type="date"
+                                                value={endDate}
+                                                onChange={e => setEndDate(e.target.value)}
+                                                className="h-9 w-40"
+                                            />
+                                        </div>
+                                        <Button size="sm" onClick={() => setSearch(searchInput)} className="gap-1">
+                                            <Search className="h-4 w-4" />
                                         </Button>
-                                    )}
-                                </div>
+                                        {(search || startDate || endDate) && (
+                                            <Button size="sm" variant="ghost" onClick={() => { setSearch(""); setSearchInput(""); setStartDate(""); setEndDate(""); }}>
+                                                Limpar
+                                            </Button>
+                                        )}
+                                    </div>
                             </div>
                         </CardContent>
                     </Card>
@@ -315,7 +347,7 @@ export default function NotasFiscais({ tipo }: { tipo: "NFE" | "NFCE" }) {
                                                     </TableCell>
                                                     <TableCell>{note.serie}</TableCell>
                                                     <TableCell className="text-sm text-muted-foreground">
-                                                        {new Date(note.created_at).toLocaleDateString("pt-BR", {
+                                                        {new Date(note.data_emissao || note.created_at).toLocaleDateString("pt-BR", {
                                                             day: "2-digit", month: "2-digit", year: "numeric",
                                                             hour: "2-digit", minute: "2-digit"
                                                         })}

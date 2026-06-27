@@ -192,21 +192,22 @@ class DeliveryOrdersController extends ApiController {
         $paymentMethod = $order['payment_method'] ?: 'Delivery';
         
         // 1. Inserir a venda
-        $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, customer_id, total_amount, payment_method, created_by, status, discount) 
-                                      VALUES (:id, :company_id, :customer_id, :total, :method, :uid, 'completed', 0)");
+        // Calcular próximo número da venda POR EMPRESA
+        $stmtNum = $this->conn->prepare("SELECT COALESCE(MAX(sale_number), 0) + 1 FROM sales WHERE company_id = :company_id FOR UPDATE");
+        $stmtNum->execute([':company_id' => $this->company_id]);
+        $saleNumber = (int)$stmtNum->fetchColumn();
+
+        $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, sale_number, customer_id, total_amount, payment_method, created_by, status, discount) 
+                                      VALUES (:id, :company_id, :sale_number, :customer_id, :total, :method, :uid, 'completed', 0)");
         $stmt->execute([
             ":id" => $saleId,
             ":company_id" => $this->company_id,
+            ":sale_number" => $saleNumber,
             ":customer_id" => $customerId,
             ":total" => $order['total'],
             ":method" => $paymentMethod,
             ":uid" => $userId
         ]);
-
-        // Pegar o número da venda
-        $stmt = $this->conn->prepare("SELECT sale_number FROM sales WHERE id = :id");
-        $stmt->execute([':id' => $saleId]);
-        $saleNumber = $stmt->fetchColumn();
 
         // 2. Pagamento
         $stmt = $this->conn->prepare("INSERT INTO sale_payments (id, company_id, sale_id, method_name, amount) VALUES (:id, :company_id, :sale_id, :method, :amount)");

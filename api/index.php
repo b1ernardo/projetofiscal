@@ -64,6 +64,8 @@ switch ($resource) {
         $controller = new ProductsController($db);
         if ($id === 'next-code' && $method === 'GET') {
             $controller->getNextCode();
+        } else if ($id === 'adjust-stock' && $method === 'POST') {
+            $controller->adjustStock();
         } else if ($method === 'GET') {
             $controller->list();
         } else if ($method === 'POST') {
@@ -199,6 +201,15 @@ switch ($resource) {
         else if ($id && $method === 'DELETE') $controller->delete($id);
         break;
 
+    case 'paused-sales':
+        require_once 'controllers/PausedSalesController.php';
+        $db = (new Database())->getConnection();
+        $controller = new PausedSalesController($db);
+        if ($method === 'GET') $controller->list();
+        else if ($method === 'POST') $controller->create();
+        else if ($id && $method === 'DELETE') $controller->delete($id);
+        break;
+
     case 'quotes':
         require_once 'controllers/QuotesController.php';
         $db = (new Database())->getConnection();
@@ -206,6 +217,7 @@ switch ($resource) {
         if ($method === 'GET' && !$id) $controller->list();
         else if ($method === 'POST' && !$id) $controller->create();
         else if ($id && $method === 'PUT') $controller->update($id);
+        else if ($id && $method === 'PATCH' && isset($route_parts[2]) && $route_parts[2] === 'status') $controller->updateStatus($id);
         else if ($id && $method === 'GET') $controller->get($id);
         break;
 
@@ -363,11 +375,74 @@ switch ($resource) {
         else if ($id === 'companies' && isset($route_parts[3]) && $route_parts[3] === 'users' && $method === 'GET') $controller->listCompanyUsers($route_parts[2]);
         else if ($id === 'companies' && $method === 'GET') $controller->listCompanies();
         else if ($id === 'companies' && $method === 'POST') $controller->createCompany();
+        else if ($id === 'companies' && $method === 'PATCH' && isset($route_parts[2]) && ($route_parts[3] ?? '') === 'toggle') $controller->toggleCompanyActive($route_parts[2]);
         else if ($id === 'companies' && $method === 'PUT') $controller->updateCompany($route_parts[2]);
         else if ($id === 'companies' && $method === 'DELETE') $controller->deleteCompany($route_parts[2]);
         else if ($id === 'accounts' && $method === 'POST') $controller->createAccount();
         else if ($id === 'users' && isset($route_parts[2]) && $method === 'PUT') $controller->updateUserBySuper($route_parts[2]);
         else if ($id === 'users' && isset($route_parts[2]) && $method === 'DELETE') $controller->deleteAccountBySuper($route_parts[2]);
+        break;
+
+    case 'fix-sale-numbers':
+        $debug = [];
+        try {
+            $dbMig = (new Database())->getConnection();
+
+            // Descobre todos os índices únicos em sale_number via information_schema
+            $idxRows = $dbMig->query("
+                SELECT INDEX_NAME FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sales'
+                AND COLUMN_NAME = 'sale_number' AND NON_UNIQUE = 0
+            ")->fetchAll(PDO::FETCH_COLUMN);
+            $debug['indexes_found'] = $idxRows;
+
+            foreach ($idxRows as $idxName) {
+                if ($idxName === 'PRIMARY') continue;
+                try {
+                    $dbMig->exec("ALTER TABLE sales DROP INDEX `$idxName`");
+                    $debug['dropped'][] = $idxName;
+                } catch (Exception $ei) {
+                    $debug['drop_error'][$idxName] = $ei->getMessage();
+                }
+            }
+
+            // Remove composto se existir de run anterior
+            try { $dbMig->exec("ALTER TABLE sales DROP INDEX uniq_company_sale_number"); } catch (Exception $ei) {}
+
+            // Valores temporários únicos (id é único, então id+1000000 também é)
+            $dbMig->exec("UPDATE sales SET sale_number = id + 1000000");
+            $debug['temp_update'] = 'ok';
+
+            // Resequência por empresa
+            $dbMig->beginTransaction();
+            $companies = $dbMig->query("SELECT DISTINCT company_id FROM sales ORDER BY company_id")->fetchAll(PDO::FETCH_COLUMN);
+            $report = [];
+            foreach ($companies as $cid) {
+                $stmt = $dbMig->prepare("SELECT id FROM sales WHERE company_id = :cid ORDER BY created_at ASC, id ASC");
+                $stmt->execute([':cid' => $cid]);
+                $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                $seq = 1;
+                foreach ($ids as $sid) {
+                    $dbMig->prepare("UPDATE sales SET sale_number = :n WHERE id = :id")->execute([':n' => $seq++, ':id' => $sid]);
+                }
+                $report[] = ['company_id' => $cid, 'total' => count($ids), 'ultimo_numero' => $seq - 1];
+            }
+            $dbMig->commit();
+
+            // Cria índice composto
+            try {
+                $dbMig->exec("ALTER TABLE sales ADD UNIQUE INDEX uniq_company_sale_number (company_id, sale_number)");
+                $debug['new_index'] = 'criado';
+            } catch (Exception $ei) {
+                $debug['new_index_error'] = $ei->getMessage();
+            }
+
+            echo json_encode(['success' => true, 'empresas' => $report, 'debug' => $debug, 'message' => 'Numeração corrigida!'], JSON_PRETTY_PRINT);
+        } catch (Exception $e) {
+            if (isset($dbMig) && $dbMig->inTransaction()) $dbMig->rollBack();
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => $e->getMessage(), 'debug' => $debug]);
+        }
         break;
 
     default:

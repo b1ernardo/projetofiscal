@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,10 +17,15 @@ interface PauseSaleDialogProps {
   onConfirm: (observation: string) => void;
   itemCount: number;
   total: string;
+  initialObservation?: string;
 }
 
-export function PauseSaleDialog({ open, onOpenChange, onConfirm, itemCount, total }: PauseSaleDialogProps) {
-  const [observation, setObservation] = useState("");
+export function PauseSaleDialog({ open, onOpenChange, onConfirm, itemCount, total, initialObservation = "" }: PauseSaleDialogProps) {
+  const [observation, setObservation] = useState(initialObservation);
+
+  useEffect(() => {
+    if (open) setObservation(initialObservation);
+  }, [open, initialObservation]);
 
   const handleConfirm = () => {
     onConfirm(observation.trim());

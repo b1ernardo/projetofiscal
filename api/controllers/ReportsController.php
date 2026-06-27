@@ -160,32 +160,59 @@ class ReportsController extends ApiController {
     public function getDashboardStats() {
         $this->authenticate();
         $today = date('Y-m-d');
-        
-        // Vendas hoje
-        $stmt = $this->conn->prepare("SELECT SUM(total_amount) as total FROM sales WHERE status = 'completed' AND DATE(created_at) = :today AND company_id = :company_id");
-        $stmt->execute([':today' => $today, ':company_id' => $this->company_id]);
-        $todaySales = (float)($stmt->fetch()['total'] ?? 0);
-        
-        // Total Despesas (Compras)
-        $stmt = $this->conn->prepare("SELECT SUM(total_amount) as total FROM purchases WHERE company_id = :company_id");
-        $stmt->execute([':company_id' => $this->company_id]);
-        $totalDespesas = (float)($stmt->fetch()['total'] ?? 0);
-        
-        // Contagem de Produtos
-        $stmt = $this->conn->prepare("SELECT COUNT(*) as count FROM products WHERE active = 1 AND company_id = :company_id");
-        $stmt->execute([':company_id' => $this->company_id]);
+
+        $period = $_GET['period'] ?? 'dia';
+        switch ($period) {
+            case 'mes':
+                $startDate = date('Y-m-01');
+                $endDate   = date('Y-m-t');
+                break;
+            case 'ano':
+                $startDate = date('Y-01-01');
+                $endDate   = date('Y-12-31');
+                break;
+            default: // dia
+                $startDate = $today;
+                $endDate   = $today;
+        }
+
+        // Faturamento + contagem de vendas no período
+        $stmt = $this->conn->prepare("
+            SELECT COALESCE(SUM(total_amount), 0) as total, COUNT(*) as count
+            FROM sales
+            WHERE status = 'completed'
+              AND DATE(created_at) BETWEEN :start AND :end
+              AND company_id = :company_id
+        ");
+        $stmt->execute([':start' => $startDate, ':end' => $endDate, ':company_id' => $this->company_id]);
+        $row = $stmt->fetch();
+        $faturamento  = (float)($row['total'] ?? 0);
+        $totalVendas  = (int)($row['count'] ?? 0);
+        $ticketMedio  = $totalVendas > 0 ? round($faturamento / $totalVendas, 2) : 0;
+
+        // Unidades vendidas no período
+        $stmt = $this->conn->prepare("
+            SELECT COALESCE(SUM(si.quantity), 0) as count
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE s.status = 'completed'
+              AND DATE(s.created_at) BETWEEN :start AND :end
+              AND s.company_id = :company_id
+        ");
+        $stmt->execute([':start' => $startDate, ':end' => $endDate, ':company_id' => $this->company_id]);
         $productCount = (int)($stmt->fetch()['count'] ?? 0);
-        
-        // Comandas abertas
+
+        // Comandas abertas (sempre atual, independente do período)
         $stmt = $this->conn->prepare("SELECT COUNT(*) as count FROM comandas WHERE status = 'open' AND company_id = :company_id");
         $stmt->execute([':company_id' => $this->company_id]);
         $openComandas = (int)($stmt->fetch()['count'] ?? 0);
-        
+
         $this->jsonResponse([
-            "todaySales" => $todaySales,
-            "totalDespesas" => $totalDespesas,
-            "productCount" => $productCount,
-            "openComandas" => $openComandas
+            "todaySales"    => $faturamento,
+            "totalVendas"   => $totalVendas,
+            "ticketMedio"   => $ticketMedio,
+            "productCount"  => $productCount,
+            "openComandas"  => $openComandas,
         ]);
     }
 

@@ -1,12 +1,17 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowDownCircle, ArrowUpCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { StockAdjustmentDialog } from "@/components/estoque/StockAdjustmentDialog";
 
 export default function Estoque() {
-  const { data: products = [], isLoading } = useQuery({
+  const [adjustType, setAdjustType] = useState<"entrada" | "saida" | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const { data: products = [], isLoading, refetch } = useQuery({
     queryKey: ["stock-products"],
     queryFn: async () => {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/products?active=true`, {
@@ -21,6 +26,11 @@ export default function Estoque() {
 
   const lowStock = products.filter((p) => p.stock_current <= p.stock_min);
 
+  const handleOpenDialog = (type: "entrada" | "saida") => {
+    setAdjustType(type);
+    setDialogOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -29,10 +39,15 @@ export default function Estoque() {
           <p className="text-muted-foreground">Gerencie entradas e saídas de mercadorias</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline"><ArrowDownCircle className="mr-2 h-4 w-4" /> Entrada</Button>
-          <Button variant="outline"><ArrowUpCircle className="mr-2 h-4 w-4" /> Saída</Button>
+          <Button variant="outline" onClick={() => handleOpenDialog("entrada")}>
+            <ArrowDownCircle className="mr-2 h-4 w-4" /> Entrada
+          </Button>
+          <Button variant="outline" onClick={() => handleOpenDialog("saida")}>
+            <ArrowUpCircle className="mr-2 h-4 w-4" /> Saída
+          </Button>
         </div>
       </div>
+
 
       {lowStock.length > 0 && (
         <Card className="border-warning/50 bg-warning/5">
@@ -80,6 +95,14 @@ export default function Estoque() {
           )}
         </CardContent>
       </Card>
+
+      <StockAdjustmentDialog 
+        open={dialogOpen} 
+        onOpenChange={setDialogOpen} 
+        type={adjustType} 
+        products={products} 
+        onSaved={refetch} 
+      />
     </div>
   );
 }

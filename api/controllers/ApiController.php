@@ -32,7 +32,7 @@ class ApiController {
     }
 
     // Método para validar se o usuário está autenticado via Bearer Token
-    protected function authenticate() {
+    public function authenticate() {
         $token = null;
 
         // 1. Tenta ler do header Authorization (chamadas de API normais)

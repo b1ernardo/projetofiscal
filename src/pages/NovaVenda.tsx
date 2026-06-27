@@ -352,7 +352,8 @@ export default function NovaVenda() {
             userId: user.id,
             discount: desconto,
             customerId: finalCustomerId,
-            sellerId: selectedSeller?.id
+            sellerId: selectedSeller?.id,
+            quoteId: editingQuoteId || undefined
         };
 
         try {
@@ -429,22 +430,23 @@ export default function NovaVenda() {
 
     return (
         <div className="flex flex-col h-[calc(100vh-4rem)] bg-[#f0f4f8] -m-6 font-sans text-sm">
-            <div className="bg-white m-2 border border-slate-300 rounded shadow-sm p-4 space-y-3">
-                <div className="flex gap-4">
-                    <div className="w-24">
+            {/* Cabeçalho: Cliente / Vendedor */}
+            <div className="bg-white m-2 border border-slate-300 rounded shadow-sm p-3 space-y-2">
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="w-full sm:w-20 shrink-0">
                         <label className="text-xs text-slate-500 block mb-1">Número</label>
                         <Input readOnly value="AUTO" className="h-8 bg-slate-100" />
                     </div>
-                    <div className="flex-[2]">
-                        <label className="text-xs text-slate-500 block mb-1">Razão Social ou CNPJ/CPF</label>
+                    <div className="flex-1 min-w-0">
+                        <label className="text-xs text-slate-500 block mb-1">Cliente</label>
                         <Popover open={openCustomerSearch} onOpenChange={setOpenCustomerSearch}>
                             <PopoverTrigger asChild>
-                                <Button variant="outline" className="w-full justify-between h-8 bg-white">
-                                    {selectedCustomer ? selectedCustomer.name : "Selecione o Cliente..."}
+                                <Button variant="outline" className="w-full justify-between h-8 bg-white truncate">
+                                    <span className="truncate">{selectedCustomer ? selectedCustomer.name : "Selecione o Cliente..."}</span>
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-[500px] p-0" align="start">
+                            <PopoverContent className="w-[min(500px,calc(100vw-1rem))] p-0" align="start">
                                 <Command>
                                     <CommandInput placeholder="Buscar cliente..." />
                                     <CommandList>
@@ -452,7 +454,7 @@ export default function NovaVenda() {
                                         <CommandGroup>
                                             {customersList.map((customer) => (
                                                 <CommandItem key={customer.id} onSelect={() => handleSelectCustomer(customer)}>
-                                                    <Check className={cn("mr-2 h-4 w-4", selectedCustomer?.id === customer.id ? "opacity-100" : "opacity-0")} />
+                                                    <Check className={cn("mr-2 h-4 w-4 shrink-0", selectedCustomer?.id === customer.id ? "opacity-100" : "opacity-0")} />
                                                     {customer.name} - {customer.cpf_cnpj}
                                                 </CommandItem>
                                             ))}
@@ -462,97 +464,72 @@ export default function NovaVenda() {
                             </PopoverContent>
                         </Popover>
                     </div>
-                    <div className="flex-1 max-w-[250px]">
-                        <label className="text-xs text-slate-500 block mb-1">Vendedor</label>
-                        <Popover open={openSellerSearch} onOpenChange={setOpenSellerSearch}>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" className="w-full justify-between h-8 bg-white">
-                                    {selectedSeller ? selectedSeller.name : "Selecione o Vendedor..."}
-                                    <User className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[250px] p-0" align="start">
-                                <Command>
-                                    <CommandInput placeholder="Buscar vendedor..." />
-                                    <CommandList>
-                                        <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
-                                        <CommandGroup>
-                                            <CommandItem onSelect={() => { setSelectedSeller(null); setOpenSellerSearch(false); }}>
-                                                <Check className={cn("mr-2 h-4 w-4", !selectedSeller ? "opacity-100" : "opacity-0")} />
-                                                Nenhum
-                                            </CommandItem>
-                                            {sellers.filter(s => s.active).map((seller) => (
-                                                <CommandItem
-                                                    key={seller.id}
-                                                    value={seller.name}
-                                                    onSelect={() => handleSelectSeller(seller)}
-                                                >
-                                                    <Check
-                                                        className={cn(
-                                                            "mr-2 h-4 w-4",
-                                                            selectedSeller?.id === seller.id ? "opacity-100" : "opacity-0"
-                                                        )}
-                                                    />
-                                                    {seller.name}
+                    <div className="flex flex-row sm:flex-row gap-2">
+                        <div className="flex-1 sm:w-44">
+                            <label className="text-xs text-slate-500 block mb-1">Vendedor</label>
+                            <Popover open={openSellerSearch} onOpenChange={setOpenSellerSearch}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-between h-8 bg-white">
+                                        <span className="truncate">{selectedSeller ? selectedSeller.name : "Vendedor..."}</span>
+                                        <User className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[min(250px,calc(100vw-1rem))] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Buscar vendedor..." />
+                                        <CommandList>
+                                            <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                                            <CommandGroup>
+                                                <CommandItem onSelect={() => { setSelectedSeller(null); setOpenSellerSearch(false); }}>
+                                                    <Check className={cn("mr-2 h-4 w-4", !selectedSeller ? "opacity-100" : "opacity-0")} />
+                                                    Nenhum
                                                 </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-                    <div className="w-40">
-                        <label className="text-xs text-slate-500 block mb-1">CPF/CNPJ</label>
-                        <Input readOnly value={selectedCustomer?.cpf_cnpj || ""} className="h-8 bg-slate-100" />
+                                                {sellers.filter(s => s.active).map((seller) => (
+                                                    <CommandItem key={seller.id} value={seller.name} onSelect={() => handleSelectSeller(seller)}>
+                                                        <Check className={cn("mr-2 h-4 w-4", selectedSeller?.id === seller.id ? "opacity-100" : "opacity-0")} />
+                                                        {seller.name}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="w-32 hidden sm:block">
+                            <label className="text-xs text-slate-500 block mb-1">CPF/CNPJ</label>
+                            <Input readOnly value={selectedCustomer?.cpf_cnpj || ""} className="h-8 bg-slate-100" />
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-[#eaf1f8] m-2 border border-[#cbd5e1] rounded p-2 pb-5 relative">
-                <span className="text-[10px] uppercase font-bold text-slate-500 absolute -top-2 left-4 bg-[#f0f4f8] px-1">Dados do produto</span>
-                <div className="flex gap-2 items-end mt-1">
-                    <div className="flex-1 border-r border-slate-300 pr-2">
-                        <label className="text-[11px] text-slate-600 block mb-1">F10 Código | Código de Barras | Descrição | Referência</label>
+            {/* Dados do produto */}
+            <div className="bg-[#eaf1f8] m-2 border border-[#cbd5e1] rounded p-2 pb-4 relative">
+                <span className="text-[10px] uppercase font-bold text-slate-500 absolute -top-2 left-4 bg-[#f0f4f8] px-1">Produto</span>
+                <div className="flex flex-col sm:flex-row gap-2 items-end mt-1">
+                    <div className="flex-1 min-w-0">
+                        <label className="text-[11px] text-slate-600 block mb-1">Código / Descrição</label>
                         <Popover open={openProductSearch} onOpenChange={setOpenProductSearch}>
                             <PopoverTrigger asChild>
-                                <Button ref={productSearchBtnRef} variant="outline" className="w-full justify-between h-12 text-lg text-left font-normal bg-white">
-                                    {selectedProduct ? `${selectedProduct.product_code || selectedProduct.code || ''} - ${selectedProduct.name}` : "Localizar Produto..."}
+                                <Button ref={productSearchBtnRef} variant="outline" className="w-full justify-between h-12 text-base text-left font-normal bg-white">
+                                    <span className="truncate">{selectedProduct ? `${selectedProduct.product_code || selectedProduct.code || ''} - ${selectedProduct.name}` : "Localizar Produto..."}</span>
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-[800px] p-0" align="start">
+                            <PopoverContent className="w-[min(800px,calc(100vw-1rem))] p-0" align="start">
                                 <Command shouldFilter={false}>
                                     <CommandInput placeholder="Localizar produto..." value={productSearchTerm} onValueChange={setProductSearchTerm} onKeyDown={handleProductSearchKeyDown} />
                                     <CommandList>
                                         <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
                                         <CommandGroup>
                                             {filteredProducts.map((product) => (
-                                                <CommandItem key={product.id} onSelect={() => handleSelectProduct(product)} className="flex items-center px-4 py-2 cursor-pointer">
-                                                    <span className="w-24 text-slate-500 font-mono text-xs truncate mr-2">{product.product_code || product.code || '--'}</span>
-                                                    <span className="flex-1 font-medium text-sm truncate mr-2">{product.name}</span>
-                                                    <span className="w-16 text-right text-xs bg-slate-100 rounded px-1">{product.stock_current ?? 0}</span>
-                                                    <span
-                                                        className="w-20 text-right text-[10px] font-semibold text-blue-600 hover:bg-blue-50 px-1 rounded transition-colors"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleSelectProduct(product);
-                                                            setSelectedPriceType(1);
-                                                            setItemPrice(Number(product.sale_price) || 0);
-                                                        }}
-                                                    >
-                                                        P1: R$ {Number(product.sale_price).toFixed(2)}
-                                                    </span>
-                                                    <span
-                                                        className="w-20 text-right text-[10px] font-semibold text-orange-600 hover:bg-orange-50 px-1 rounded transition-colors"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleSelectProduct(product);
-                                                            setSelectedPriceType(2);
-                                                            setItemPrice(Number(product.sale_price2 || 0) || 0);
-                                                        }}
-                                                    >
-                                                        P2: R$ {Number(product.sale_price2 || 0).toFixed(2)}
+                                                <CommandItem key={product.id} onSelect={() => handleSelectProduct(product)} className="flex items-center px-3 py-2 cursor-pointer gap-2">
+                                                    <span className="w-20 text-slate-500 font-mono text-xs truncate shrink-0">{product.product_code || product.code || '--'}</span>
+                                                    <span className="flex-1 font-medium text-sm truncate">{product.name}</span>
+                                                    <span className="text-xs bg-slate-100 rounded px-1 shrink-0">{product.stock_current ?? 0}</span>
+                                                    <span className="text-[10px] font-semibold text-blue-600 shrink-0" onClick={(e) => { e.stopPropagation(); handleSelectProduct(product); setSelectedPriceType(1); setItemPrice(Number(product.sale_price) || 0); }}>
+                                                        R$ {Number(product.sale_price).toFixed(2)}
                                                     </span>
                                                 </CommandItem>
                                             ))}
@@ -564,72 +541,67 @@ export default function NovaVenda() {
                     </div>
 
                     {selectedProduct && (
-                        <div className="flex flex-col">
-                            <label className="text-[11px] text-slate-600 block mb-1">Tabela</label>
-                            <div className="flex gap-1 h-12">
-                                <button
-                                    onClick={() => { setSelectedPriceType(1); setItemPrice(selectedProduct.sale_price); }}
-                                    className={`h-12 px-4 min-w-[100px] flex flex-col items-center justify-center text-xs font-bold rounded border transition-all ${selectedPriceType === 1 ? 'bg-blue-600 text-white border-blue-700 shadow-inner' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}
-                                >
-                                    <span>P1</span>
-                                    <span className="text-[10px] opacity-90">R$ {Number(selectedProduct.sale_price).toFixed(2)}</span>
-                                </button>
-                                <button
-                                    onClick={() => { setSelectedPriceType(2); setItemPrice(Number(selectedProduct.sale_price2) || 0); }}
-                                    className={`h-12 px-4 min-w-[100px] flex flex-col items-center justify-center text-xs font-bold rounded border transition-all ${selectedPriceType === 2 ? 'bg-orange-500 text-white border-orange-600 shadow-inner' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}
-                                >
-                                    <span>P2</span>
-                                    <span className="text-[10px] opacity-90">R$ {Number(selectedProduct.sale_price2 || 0).toFixed(2)}</span>
-                                </button>
-                            </div>
+                        <div className="flex gap-1 shrink-0">
+                            <button onClick={() => { setSelectedPriceType(1); setItemPrice(selectedProduct.sale_price); }}
+                                className={`h-12 px-3 flex flex-col items-center justify-center text-xs font-bold rounded border transition-all ${selectedPriceType === 1 ? 'bg-blue-600 text-white border-blue-700' : 'bg-white border-slate-300 text-slate-700'}`}>
+                                <span>P1</span>
+                                <span className="text-[10px]">R$ {Number(selectedProduct.sale_price).toFixed(2)}</span>
+                            </button>
+                            <button onClick={() => { setSelectedPriceType(2); setItemPrice(Number(selectedProduct.sale_price2) || 0); }}
+                                className={`h-12 px-3 flex flex-col items-center justify-center text-xs font-bold rounded border transition-all ${selectedPriceType === 2 ? 'bg-orange-500 text-white border-orange-600' : 'bg-white border-slate-300 text-slate-700'}`}>
+                                <span>P2</span>
+                                <span className="text-[10px]">R$ {Number(selectedProduct.sale_price2 || 0).toFixed(2)}</span>
+                            </button>
                         </div>
                     )}
 
-                    <div className="w-24">
-                        <label className="text-[11px] text-center text-slate-600 block mb-1">Quantidade</label>
-                        <Input ref={qtdRef} type="number" step="0.001" className="h-12 text-lg text-right" value={itemQtd} onChange={(e) => setItemQtd(Number(e.target.value))} onFocus={(e) => e.target.select()} onKeyDown={(e) => e.key === 'Enter' && priceRef.current?.focus()} />
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        <div className="flex-1 sm:w-24">
+                            <label className="text-[11px] text-slate-600 block mb-1">Qtd</label>
+                            <Input ref={qtdRef} type="number" step="0.001" className="h-12 text-lg text-right" value={itemQtd} onChange={(e) => setItemQtd(Number(e.target.value))} onFocus={(e) => e.target.select()} onKeyDown={(e) => e.key === 'Enter' && priceRef.current?.focus()} />
+                        </div>
+                        <div className="flex-1 sm:w-28">
+                            <label className="text-[11px] text-slate-600 block mb-1">Preço R$</label>
+                            <Input ref={priceRef} type="number" step="0.01"
+                                className={cn("h-12 text-lg text-right", selectedProduct && !selectedProduct.can_change_price && "bg-slate-100 cursor-not-allowed")}
+                                value={itemPrice} onChange={(e) => setItemPrice(Number(e.target.value))}
+                                onFocus={(e) => e.target.select()} onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
+                                readOnly={selectedProduct && !selectedProduct.can_change_price} />
+                        </div>
+                        <div className="flex items-end">
+                            <Button onClick={handleAddItem} className="h-12 px-5 bg-blue-600 text-white font-bold">ADD</Button>
+                        </div>
                     </div>
-                    <div className="w-28">
-                        <label className="text-[11px] text-center text-slate-600 block mb-1">Preço R$</label>
-                        <Input 
-                            ref={priceRef} 
-                            type="number" 
-                            step="0.01" 
-                            className={cn("h-12 text-lg text-right", selectedProduct && !selectedProduct.can_change_price && "bg-slate-100 cursor-not-allowed")} 
-                            value={itemPrice} 
-                            onChange={(e) => setItemPrice(Number(e.target.value))} 
-                            onFocus={(e) => e.target.select()} 
-                            onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
-                            readOnly={selectedProduct && !selectedProduct.can_change_price}
-                        />
-                    </div>
-                    <Button onClick={handleAddItem} className="h-12 px-6 bg-blue-600 text-white font-bold">ADD</Button>
                 </div>
             </div>
 
+            {/* Tabela de itens */}
             <div className="flex-1 bg-white m-2 border border-slate-300 rounded shadow-sm overflow-hidden flex flex-col">
                 <div className="flex-1 overflow-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-[#c2e0c6] border-b border-slate-400">
                             <tr>
-                                <th className="p-2 text-left w-12">Item</th>
+                                <th className="p-2 text-left w-8 hidden sm:table-cell">#</th>
                                 <th className="p-2 text-left">Descrição</th>
-                                <th className="p-2 text-right">Qtd</th>
-                                <th className="p-2 text-right">Preço R$</th>
-                                <th className="p-2 text-right">Total R$</th>
-                                <th className="p-2 text-center w-12">Ação</th>
+                                <th className="p-2 text-right w-14">Qtd</th>
+                                <th className="p-2 text-right w-20 hidden sm:table-cell">Preço</th>
+                                <th className="p-2 text-right w-20">Total</th>
+                                <th className="p-2 text-center w-10"></th>
                             </tr>
                         </thead>
                         <tbody>
                             {items.map((it, idx) => (
                                 <tr key={idx} className="border-b hover:bg-slate-50">
-                                    <td className="p-2">{idx + 1}</td>
-                                    <td className="p-2">{it.name}</td>
+                                    <td className="p-2 hidden sm:table-cell">{idx + 1}</td>
+                                    <td className="p-2">
+                                        <span className="block">{it.name}</span>
+                                        <span className="text-xs text-slate-400 sm:hidden">{it.unit_price.toFixed(2)} × {it.quantity.toFixed(3)}</span>
+                                    </td>
                                     <td className="p-2 text-right">{it.quantity.toFixed(3)}</td>
-                                    <td className="p-2 text-right">{it.unit_price.toFixed(2)}</td>
+                                    <td className="p-2 text-right hidden sm:table-cell">{it.unit_price.toFixed(2)}</td>
                                     <td className="p-2 text-right font-semibold">{(it.quantity * it.unit_price).toFixed(2)}</td>
                                     <td className="p-2 text-center">
-                                        <button onClick={() => handleRemoveItem(idx)} className="text-red-500 font-bold px-2">X</button>
+                                        <button onClick={() => handleRemoveItem(idx)} className="text-red-500 font-bold px-2">✕</button>
                                     </td>
                                 </tr>
                             ))}
@@ -638,79 +610,56 @@ export default function NovaVenda() {
                 </div>
             </div>
 
-            <div className="bg-[#f8fafc] mx-2 px-4 py-3 flex justify-between items-center text-sm border-t">
-                <div className="font-bold text-slate-700">SUBTOTAL | {subtotal.toFixed(2)}</div>
-                <div className="flex gap-6 items-center">
-                    <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-600">DESCONTO %</span>
-                        <Input 
-                            type="number" 
-                            step="0.01" 
-                            className="w-20 h-8 text-right font-bold text-red-600" 
-                            value={descontoPerc} 
+            {/* Totais */}
+            <div className="bg-[#f8fafc] mx-2 px-3 py-2 border-t text-sm space-y-1">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 items-center justify-between">
+                    <span className="font-bold text-slate-700">SUBTOTAL: R$ {subtotal.toFixed(2)}</span>
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <span className="font-bold text-slate-600 text-xs">DESC %</span>
+                        <Input type="number" step="0.01" className="w-16 h-8 text-right font-bold text-red-600"
+                            value={descontoPerc} onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                                 const p = Number(e.target.value);
-                                if (user?.max_discount !== undefined && p > user.max_discount) {
-                                    toast.error(`Seu limite de desconto é de ${user.max_discount}%`);
-                                    return;
-                                }
+                                if (user?.max_discount !== undefined && p > user.max_discount) { toast.error(`Limite: ${user.max_discount}%`); return; }
                                 setDescontoPerc(p);
-                                if (subtotal > 0) {
-                                    setDesconto(Number((subtotal * (p / 100)).toFixed(2)));
-                                }
-                            }}
-                            onFocus={(e) => e.target.select()}
-                        />
-                        <span className="font-bold text-slate-600 ml-2">R$</span>
-                        <Input 
-                            type="number" 
-                            step="0.01" 
-                            className="w-24 h-8 text-right font-bold text-red-600" 
-                            value={desconto} 
+                                if (subtotal > 0) setDesconto(Number((subtotal * (p / 100)).toFixed(2)));
+                            }} />
+                        <span className="font-bold text-slate-600 text-xs">R$</span>
+                        <Input type="number" step="0.01" className="w-20 h-8 text-right font-bold text-red-600"
+                            value={desconto} onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                                 const v = Number(e.target.value);
                                 const p = subtotal > 0 ? (v / subtotal) * 100 : 0;
-                                if (user?.max_discount !== undefined && p > user.max_discount) {
-                                    toast.error(`Seu limite de desconto é de ${user.max_discount}%`);
-                                    return;
-                                }
+                                if (user?.max_discount !== undefined && p > user.max_discount) { toast.error(`Limite: ${user.max_discount}%`); return; }
                                 setDesconto(v);
-                                if (subtotal > 0) {
-                                    setDescontoPerc(Number(((v / subtotal) * 100).toFixed(2)));
-                                }
-                            }}
-                            onFocus={(e) => e.target.select()}
-                        />
-                    </div>
-                    {acrescimo > 0 && (
-                        <div className="font-bold text-blue-600">ACRÉSCIMO | {acrescimo.toFixed(2)}</div>
-                    )}
-                    <div className="font-bold">
-                        <span>TOTAL R$ | <span className="text-2xl text-green-700">{total.toFixed(2)}</span></span>
+                                if (subtotal > 0) setDescontoPerc(Number(((v / subtotal) * 100).toFixed(2)));
+                            }} />
+                        <span className="font-bold text-lg text-green-700">TOTAL: R$ {total.toFixed(2)}</span>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-[#475569] p-3 flex justify-between items-center">
-                <div className="flex gap-2">
-                    <Button onClick={() => setProductModalOpen(true)} className="bg-[#3b82f6] text-white">F8 | Produtos</Button>
-                    <Button onClick={() => setCustomerModalOpen(true)} className="bg-[#3b82f6] text-white">F9 | Pessoas</Button>
-                    <Button
-                        onClick={() => {
-                            if (items.length === 0) {
-                                toast.error("Adicione itens para gerar um orçamento.");
-                                return;
-                            }
-                            setQuoteDialogOpen(true);
-                        }}
-                        className="bg-[#3b82f6] text-white"
-                    >
-                        <FileText className="mr-2 h-4 w-4" /> Gerar Orçamento (F7)
+            {/* Botões de ação */}
+            <div className="bg-[#475569] p-2 flex flex-wrap gap-2 justify-between items-center">
+                <div className="flex flex-wrap gap-2">
+                    <Button onClick={() => setProductModalOpen(true)} className="bg-[#3b82f6] text-white text-xs sm:text-sm h-9">
+                        <Package className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">F8 |</span> Produtos
+                    </Button>
+                    <Button onClick={() => setCustomerModalOpen(true)} className="bg-[#3b82f6] text-white text-xs sm:text-sm h-9">
+                        <Users className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">F9 |</span> Pessoas
+                    </Button>
+                    <Button onClick={() => { if (items.length === 0) { toast.error("Adicione itens."); return; } setQuoteDialogOpen(true); }}
+                        className="bg-[#3b82f6] text-white text-xs sm:text-sm h-9">
+                        <FileText className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">Orçamento</span>
                     </Button>
                 </div>
                 <div className="flex gap-2">
-                    <Button onClick={handleOpenCheckout} className="bg-green-600 text-white px-8" disabled={items.length === 0}>Finalizar (F3)</Button>
-                    <Button onClick={() => navigate(-1)} className="bg-red-600 text-white hover:bg-red-700">Cancelar (ESC)</Button>
+                    <Button onClick={handleOpenCheckout} className="bg-green-600 text-white h-9 px-4 sm:px-8" disabled={items.length === 0}>
+                        <CheckCircle className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">Finalizar (F3)</span><span className="sm:hidden">OK</span>
+                    </Button>
+                    <Button onClick={() => navigate(-1)} className="bg-red-600 text-white hover:bg-red-700 h-9">
+                        <XCircle className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">Cancelar</span>
+                    </Button>
                 </div>
             </div>
 

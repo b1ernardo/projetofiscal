@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import forge from "node-forge";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -57,7 +58,7 @@ type FiscalFormValues = z.infer<typeof fiscalSchema>;
 export function FiscalConfig() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
-  const [certificadoBase64, setCertificadoBase64] = useState<string | null>(null);
+  const [rawPfxBytes, setRawPfxBytes] = useState<Uint8Array | null>(null);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
 
@@ -171,15 +172,45 @@ export function FiscalConfig() {
     }
   };
 
+  // Converte PFX legado (RC2-40) para AES-256 usando node-forge (pure JS, sem OpenSSL do servidor)
+  const convertPfxWithForge = (bytes: Uint8Array, password: string): string => {
+    const binaryStr = Array.from(bytes).map(b => String.fromCharCode(b)).join("");
+    const asn1 = forge.asn1.fromDer(binaryStr);
+    const pkcs12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, password);
+
+    let privateKey: forge.pki.PrivateKey | null = null;
+    let cert: forge.pki.Certificate | null = null;
+    const chain: forge.pki.Certificate[] = [];
+
+    for (const sc of pkcs12.safeContents) {
+      for (const bag of sc.safeBags) {
+        if (bag.type === forge.pki.oids.pkcs8ShroudedKeyBag || bag.type === forge.pki.oids.keyBag) {
+          if (bag.key) privateKey = bag.key as forge.pki.PrivateKey;
+        } else if (bag.type === forge.pki.oids.certBag) {
+          if (bag.cert) { if (!cert) cert = bag.cert; else chain.push(bag.cert); }
+        }
+      }
+    }
+
+    if (!privateKey || !cert) throw new Error("Chave privada ou certificado não encontrados no arquivo PFX.");
+
+    const newP12 = forge.pkcs12.toPkcs12Asn1(privateKey, [cert, ...chain], password, {
+      algorithm: "3des",
+      count: 2048,
+    });
+
+    return btoa(forge.asn1.toDer(newP12).getBytes());
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onloadend = () => {
-      setCertificadoBase64(reader.result as string);
+      setRawPfxBytes(new Uint8Array(reader.result as ArrayBuffer));
       toast.success("Certificado selecionado com sucesso");
     };
-    reader.readAsDataURL(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -196,6 +227,18 @@ export function FiscalConfig() {
   async function onSubmit(values: FiscalFormValues) {
     setLoading(true);
     try {
+      let certBase64: string | null = null;
+      if (rawPfxBytes) {
+        const password = values.certificado_senha || "";
+        try {
+          certBase64 = convertPfxWithForge(rawPfxBytes, password);
+        } catch (e) {
+          toast.error("Erro ao processar o certificado: " + (e as Error).message + ". Verifique se a senha está correta.");
+          setLoading(false);
+          return;
+        }
+      }
+
       const token = localStorage.getItem('auth_token');
       const res = await fetch(`${apiUrl}/fiscal/config`, {
         method: "POST",
@@ -203,7 +246,7 @@ export function FiscalConfig() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ ...values, certificado_pfx: certificadoBase64 }),
+        body: JSON.stringify({ ...values, certificado_pfx: certBase64 }),
       });
       if (res.ok) toast.success("Configurações fiscais salvas com sucesso!");
       else throw new Error("Falha ao salvar");
@@ -358,7 +401,7 @@ export function FiscalConfig() {
                     <Button type="button" variant="outline" onClick={() => document.getElementById('cert-upload')?.click()}>
                       <Upload className="mr-2 h-4 w-4" /> Selecionar Arquivo
                     </Button>
-                    {certificadoBase64 && <CheckCircle2 className="text-green-500 h-5 w-5" />}
+                    {rawPfxBytes !== null && <CheckCircle2 className="text-green-500 h-5 w-5" />}
                     <input id="cert-upload" type="file" className="hidden" accept=".pfx,.p12" onChange={handleFileUpload} />
                   </div>
                   <FormDescription>Selecione um novo certificado para atualizar.</FormDescription>

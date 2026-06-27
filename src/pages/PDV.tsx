@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,13 +18,14 @@ import { CloseCashRegisterDialog } from "@/components/caixa/CloseCashRegisterDia
 import { SaveToComandaDialog } from "@/components/pdv/SaveToComandaDialog";
 import { ReceiptOptionsDialog } from "@/components/pdv/ReceiptOptionsDialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import { useProducts, type ProductWithBoxConfigs } from "@/hooks/useProducts";
 import { useSaveSale } from "@/hooks/useSaveSale";
 import { useFiscal } from "@/hooks/useFiscal";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { printReceipt, printReceiptA4, getWhatsappUrl } from "@/utils/printReceipt";
 import { useCustomers } from "@/hooks/useCustomers";
 
@@ -35,15 +37,16 @@ interface CartItem {
 }
 
 interface PausedSale {
-  id: number;
+  id: string;      // UUID from DB
   items: CartItem[];
   total: number;
-  pausedAt: Date;
+  paused_at: string;
   label: string;
   observation: string;
 }
 
-let pauseCounter = 0;
+const API = import.meta.env.VITE_API_URL;
+const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem('auth_token')}`, 'Content-Type': 'application/json' });
 
 export default function PDV() {
   const [search, setSearch] = useState("");
@@ -52,10 +55,12 @@ export default function PDV() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
   const [pausedSalesOpen, setPausedSalesOpen] = useState(false);
-  const [pausedSales, setPausedSales] = useState<PausedSale[]>([]);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [formatDialogProduct, setFormatDialogProduct] = useState<ProductWithBoxConfigs | null>(null);
   const [pendingQty, setPendingQty] = useState(1); // quantity from barcode scanner (QTY*CODE format)
+  const [qtyDialogProduct, setQtyDialogProduct] = useState<ProductWithBoxConfigs | null>(null);
+  const [qtyInput, setQtyInput] = useState("1");
+  const qtyInputRef = useRef<HTMLInputElement>(null);
   const [discount, setDiscount] = useState(0);
   const [discountType, setDiscountType] = useState<"percent" | "value">("percent");
   const [openCashDialog, setOpenCashDialog] = useState(false);
@@ -63,6 +68,7 @@ export default function PDV() {
   const [saveToComandaOpen, setSaveToComandaOpen] = useState(false);
   const [receiptOptionsOpen, setReceiptOptionsOpen] = useState(false);
   const [lastSaleData, setLastSaleData] = useState<any>(null);
+  const [currentObservation, setCurrentObservation] = useState("");
   const isMobile = useIsMobile();
 
   const { data: products = [], isLoading } = useProducts();
@@ -72,6 +78,37 @@ export default function PDV() {
   const { data: customersList = [] } = useCustomers();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  // ─── Vendas Pausadas (API) ────────────────────────────────────────────────
+  const { data: pausedSales = [] } = useQuery<PausedSale[]>({
+    queryKey: ['paused-sales'],
+    queryFn: async () => {
+      const res = await fetch(`${API}/paused-sales`, { headers: authHeader() });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data;
+    },
+  });
+
+  const pauseSaleMutation = useMutation({
+    mutationFn: async (payload: { label: string; observation: string; items: CartItem[]; total: number }) => {
+      const res = await fetch(`${API}/paused-sales`, {
+        method: 'POST',
+        headers: authHeader(),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Erro ao pausar venda');
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['paused-sales'] }),
+  });
+
+  const deletePausedMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await fetch(`${API}/paused-sales/${id}`, { method: 'DELETE', headers: authHeader() });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['paused-sales'] }),
+  });
 
   const [selectedSeller, setSelectedSeller] = useState<any>(null);
   const [openSellerSearch, setOpenSellerSearch] = useState(false);
@@ -108,13 +145,13 @@ export default function PDV() {
       term = starMatch[1].toLowerCase().trim();
     }
 
-    if (!term) return true; // Show all if just "10*" is typed
+    const matchesCategory = selectedCategory === "Todos" || p.category_name === selectedCategory;
+    if (!term) return matchesCategory; // Apply category filter even if search is empty
 
     const matchesSearch =
       p.name.toLowerCase().includes(term) ||
       (p.code || "").toLowerCase().includes(term) ||
       String(p.product_code || "").includes(term);
-    const matchesCategory = selectedCategory === "Todos" || p.category_name === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
@@ -173,6 +210,7 @@ export default function PDV() {
         toast.success(`${qty}x ${candidate.name} adicionado ao carrinho!`);
       }
       setSearch('');
+      if (searchRef.current) searchRef.current.value = '';
     } else if (filtered.length === 0) {
       toast.error('Nenhum produto encontrado para este código.');
     }
@@ -181,11 +219,21 @@ export default function PDV() {
 
   const handleProductClick = (product: ProductWithBoxConfigs) => {
     if (product.boxConfigs.length > 0) {
-      setPendingQty(1);   // normal click always uses qty 1
+      setPendingQty(1);
       setFormatDialogProduct(product);
     } else {
-      addToCart(product.id, product.name, product.sale_price);
+      setQtyInput("1");
+      setQtyDialogProduct(product);
     }
+  };
+
+  const confirmQtyDialog = () => {
+    if (!qtyDialogProduct) return;
+    const qty = parseFloat(qtyInput.replace(',', '.'));
+    if (isNaN(qty) || qty <= 0) return;
+    addToCart(qtyDialogProduct.id, qtyDialogProduct.name, qtyDialogProduct.sale_price, qty);
+    toast.success(`${qty}x ${qtyDialogProduct.name} adicionado!`);
+    setQtyDialogProduct(null);
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -204,34 +252,39 @@ export default function PDV() {
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-  const confirmPause = (observation: string) => {
-    pauseCounter++;
-    setPausedSales((prev) => [
-      ...prev,
-      { id: pauseCounter, items: [...cart], total: subtotal, pausedAt: new Date(), label: `Venda #${pauseCounter}`, observation },
-    ]);
-    setCart([]);
-    setPauseDialogOpen(false);
-    setCartDrawerOpen(false);
-    toast.info("Venda pausada!");
+  const confirmPause = async (observation: string) => {
+    const label = observation || `Venda ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    try {
+      await pauseSaleMutation.mutateAsync({ label, observation, items: [...cart], total: subtotal });
+      setCart([]);
+      setCurrentObservation("");
+      setPauseDialogOpen(false);
+      setCartDrawerOpen(false);
+      toast.info("Venda pausada!");
+    } catch {
+      toast.error("Erro ao pausar venda.");
+    }
   };
 
-  const resumeSale = (sale: PausedSale) => {
+  const resumeSale = async (sale: PausedSale) => {
     if (cart.length > 0) {
-      pauseCounter++;
-      setPausedSales((prev) => [
-        ...prev,
-        { id: pauseCounter, items: [...cart], total: subtotal, pausedAt: new Date(), label: `Venda #${pauseCounter}`, observation: "" },
-      ]);
-      toast.info("Venda atual foi pausada automaticamente.");
+      // Pause current cart before resuming selected
+      const label = currentObservation || `Venda ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      try {
+        await pauseSaleMutation.mutateAsync({ label, observation: currentObservation, items: [...cart], total: subtotal });
+        toast.info("Venda atual foi pausada automaticamente.");
+      } catch {
+        toast.error("Erro ao pausar venda atual.");
+      }
     }
     setCart(sale.items);
-    setPausedSales((prev) => prev.filter((s) => s.id !== sale.id));
+    setCurrentObservation(sale.observation);
+    await deletePausedMutation.mutateAsync(sale.id);
     toast.success(`${sale.label} retomada!`);
   };
 
-  const deletePausedSale = (id: number) => {
-    setPausedSales((prev) => prev.filter((s) => s.id !== id));
+  const deletePausedSale = async (id: string) => {
+    await deletePausedMutation.mutateAsync(id);
     toast.info("Venda pausada removida.");
   };
 
@@ -259,7 +312,8 @@ export default function PDV() {
     onPause: () => setPauseDialogOpen(true),
     onCheckout: handleOpenCheckout,
     onSaveToComanda: () => setSaveToComandaOpen(true),
-    maxDiscount: user?.max_discount
+    maxDiscount: user?.max_discount,
+    observation: currentObservation,
   };
 
   if (loadingRegister) {
@@ -293,72 +347,78 @@ export default function PDV() {
   return (
     <div className="flex h-[calc(100vh-5rem)] gap-4">
       <div className="flex flex-1 flex-col gap-3 min-w-0">
-        <div className="flex gap-2">
+        <div className="flex flex-col md:flex-row gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchRef}
               placeholder="Buscar por nome, código ou cód. barras (Enter para adicionar)..."
-              value={search}
+              defaultValue={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleSearchKeyDown}
               className="pl-9"
+              autoComplete="off"
+              spellCheck={false}
             />
           </div>
-          <Button variant="outline" size="icon" className="shrink-0 md:hidden" onClick={() => setPausedSalesOpen(true)}>
-            <ListRestart className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" onClick={() => setPausedSalesOpen(true)} className="relative hidden md:inline-flex">
-            <ListRestart className="mr-2 h-4 w-4" />
-            Vendas Pausadas
-            {pausedSales.length > 0 && (
-              <Badge variant="destructive" className="ml-2 h-5 min-w-5 px-1.5 text-xs">{pausedSales.length}</Badge>
-            )}
-          </Button>
-
-          <Popover open={openSellerSearch} onOpenChange={setOpenSellerSearch}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className={cn("gap-2", selectedSeller && "bg-primary/10 border-primary text-primary font-bold")}>
-                <User className="h-4 w-4" />
-                {selectedSeller ? selectedSeller.name : "Vendedor"}
+          <div className="flex gap-2 justify-between md:justify-end">
+            <div className="flex gap-2">
+              <Button variant="outline" size="icon" className="shrink-0 md:hidden" onClick={() => setPausedSalesOpen(true)}>
+                <ListRestart className="h-4 w-4" />
               </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[200px] p-0" align="end">
-              <Command>
-                <CommandInput placeholder="Buscar vendedor..." />
-                <CommandList>
-                  <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
-                  <CommandGroup>
-                    <CommandItem
-                      onSelect={() => { setSelectedSeller(null); setOpenSellerSearch(false); }}
-                    >
-                      <Check className={cn("mr-2 h-4 w-4", !selectedSeller ? "opacity-100" : "opacity-0")} />
-                      Nenhum
-                    </CommandItem>
-                    {sellers.filter(s => s.active).map((seller) => (
-                      <CommandItem
-                        key={seller.id}
-                        value={seller.name}
-                        onSelect={() => { setSelectedSeller(seller); setOpenSellerSearch(false); }}
-                      >
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4",
-                            selectedSeller?.id === seller.id ? "opacity-100" : "opacity-0"
-                          )}
-                        />
-                        {seller.name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+              <Button variant="outline" onClick={() => setPausedSalesOpen(true)} className="relative hidden md:inline-flex">
+                <ListRestart className="mr-2 h-4 w-4" />
+                Vendas Pausadas
+                {pausedSales.length > 0 && (
+                  <Badge variant="destructive" className="ml-2 h-5 min-w-5 px-1.5 text-xs">{pausedSales.length}</Badge>
+                )}
+              </Button>
 
-          <Button variant="destructive" size="sm" onClick={() => setCloseCashDialog(true)} className="shrink-0">
-            <Lock className="mr-2 h-4 w-4" /> Fechar Caixa
-          </Button>
+              <Popover open={openSellerSearch} onOpenChange={setOpenSellerSearch}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("gap-2", selectedSeller && "bg-primary/10 border-primary text-primary font-bold")}>
+                    <User className="h-4 w-4" />
+                    {selectedSeller ? selectedSeller.name : "Vendedor"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0" align="end">
+                  <Command>
+                    <CommandInput placeholder="Buscar vendedor..." />
+                    <CommandList>
+                      <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={() => { setSelectedSeller(null); setOpenSellerSearch(false); }}
+                        >
+                          <Check className={cn("mr-2 h-4 w-4", !selectedSeller ? "opacity-100" : "opacity-0")} />
+                          Nenhum
+                        </CommandItem>
+                        {sellers.filter(s => s.active).map((seller) => (
+                          <CommandItem
+                            key={seller.id}
+                            value={seller.name}
+                            onSelect={() => { setSelectedSeller(seller); setOpenSellerSearch(false); }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedSeller?.id === seller.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {seller.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <Button variant="destructive" size="sm" onClick={() => setCloseCashDialog(true)} className="shrink-0">
+              <Lock className="mr-2 h-4 w-4" /> Fechar Caixa
+            </Button>
+          </div>
         </div>
 
         <div className="flex gap-2 flex-wrap">
@@ -421,7 +481,7 @@ export default function PDV() {
         </DrawerContent>
       </Drawer>
 
-      <PauseSaleDialog open={pauseDialogOpen} onOpenChange={setPauseDialogOpen} onConfirm={confirmPause} itemCount={totalItems} total={formatCurrency(subtotal)} />
+      <PauseSaleDialog open={pauseDialogOpen} onOpenChange={setPauseDialogOpen} onConfirm={confirmPause} itemCount={totalItems} total={formatCurrency(subtotal)} initialObservation={currentObservation} />
       <PausedSalesDialog open={pausedSalesOpen} onOpenChange={setPausedSalesOpen} pausedSales={pausedSales} onResume={resumeSale} onDelete={deletePausedSale} formatCurrency={formatCurrency} />
       <CheckoutDialog
         open={checkoutOpen}
@@ -466,6 +526,7 @@ export default function PDV() {
             setCart([]);
             setDiscount(0);
             setSelectedSeller(null);
+            setCurrentObservation("");
             setCheckoutOpen(false);
             setCartDrawerOpen(false);
           } catch (err: any) {
@@ -548,6 +609,34 @@ export default function PDV() {
           onClosed={() => queryClient.invalidateQueries({ queryKey: ["cash-register-open"] })}
         />
       )}
+
+      <Dialog open={!!qtyDialogProduct} onOpenChange={(open) => !open && setQtyDialogProduct(null)}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Quantidade</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm text-muted-foreground mb-3 truncate">{qtyDialogProduct?.name}</p>
+            <Label htmlFor="qty-input" className="sr-only">Quantidade</Label>
+            <Input
+              id="qty-input"
+              ref={qtyInputRef}
+              type="number"
+              min="0.001"
+              step="0.001"
+              value={qtyInput}
+              onChange={(e) => setQtyInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmQtyDialog(); }}
+              className="text-center text-xl h-12"
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setQtyDialogProduct(null)}>Cancelar</Button>
+            <Button onClick={confirmQtyDialog}>Adicionar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

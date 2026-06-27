@@ -42,10 +42,10 @@ class FiscalService {
 
         $pfxContents = base64_decode($this->config['certificado_pfx']);
         $password = $this->config['certificado_senha'];
-        
+
         $configData = [
             "atualizacao" => date('Y-m-d H:i:s'),
-            "tpAmb" => (int)$this->config['ambiente'], // 1-Produção, 2-Homologação
+            "tpAmb" => (int)$this->config['ambiente'],
             "razaosocial" => $this->config['razao_social'],
             "cnpj" => $this->config['cnpj'],
             "siglaUF" => strtoupper($this->config['uf'] ?? ''),
@@ -57,11 +57,87 @@ class FiscalService {
         ];
 
         $configJson = json_encode($configData);
-        $certificate = Certificate::readPfx($pfxContents, $password);
+
+        // Tenta leitura direta; se falhar (certificado legado RC2-40 + OpenSSL 3.x), converte via CLI
+        try {
+            $certificate = Certificate::readPfx($pfxContents, $password);
+        } catch (\Exception $e) {
+            $pfxContents = $this->convertLegacyPfx($pfxContents, $password);
+            $certificate = Certificate::readPfx($pfxContents, $password);
+        }
+
         $this->tools = new Tools($configJson, $certificate);
-        $this->tools->model('55'); // Padrão NF-e, alterado dinamicamente para 65 se for NFC-e
-        
+        $this->tools->model('55');
+
         return $this->tools;
+    }
+
+    /**
+     * Converte PFX no formato legado (RC2-40/3DES) para AES-256 usando openssl CLI.
+     * Necessário quando PHP/OpenSSL 3.x rejeita o certificado A1 antigo.
+     */
+    private function convertLegacyPfx(string $pfxData, string $password): string {
+        $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR;
+        $id  = uniqid('pfx_', true);
+        $fIn   = $dir . $id . '_in.pfx';
+        $fPem  = $dir . $id . '.pem';
+        $fOut  = $dir . $id . '_out.pfx';
+        $fPass = $dir . $id . '.pass';
+
+        try {
+            file_put_contents($fIn,   $pfxData);
+            file_put_contents($fPass, $password);
+
+            // Localiza o binário openssl (Windows XAMPP ou Linux)
+            $openssl = 'openssl';
+            if (PHP_OS_FAMILY === 'Windows') {
+                foreach ([
+                    'C:\\xampp\\apache\\bin\\openssl.exe',
+                    'C:\\Program Files\\OpenSSL-Win64\\bin\\openssl.exe',
+                    'C:\\OpenSSL-Win64\\bin\\openssl.exe',
+                ] as $candidate) {
+                    if (file_exists($candidate)) { $openssl = $candidate; break; }
+                }
+            }
+
+            $inArg   = escapeshellarg($fIn);
+            $pemArg  = escapeshellarg($fPem);
+            $outArg  = escapeshellarg($fOut);
+            $passArg = escapeshellarg("file:{$fPass}");
+
+            // Extrai PEM: tenta com -legacy primeiro (OpenSSL 3.x), depois sem
+            $converted = false;
+            foreach ([' -legacy', ''] as $legacyFlag) {
+                $cmd = escapeshellcmd($openssl) . " pkcs12{$legacyFlag} -in {$inArg} -out {$pemArg}"
+                     . " -passin {$passArg} -passout {$passArg} 2>&1";
+                \exec($cmd, $out, $ret);
+                if ($ret === 0) { $converted = true; break; }
+            }
+
+            if (!$converted) {
+                throw new \Exception(
+                    "Não foi possível converter o certificado PFX legado.\n"
+                    . "Converta o arquivo .pfx manualmente e faça o upload novamente.\n"
+                    . "Erro OpenSSL: " . implode(' ', $out)
+                );
+            }
+
+            // Reempacota como PFX com criptografia moderna (AES-256)
+            $cmd2 = escapeshellcmd($openssl) . " pkcs12 -export -in {$pemArg} -out {$outArg}"
+                  . " -passin {$passArg} -passout {$passArg} 2>&1";
+            \exec($cmd2, $out2, $ret2);
+
+            if ($ret2 !== 0) {
+                throw new \Exception("Falha ao reempacotar certificado: " . implode(' ', $out2));
+            }
+
+            return file_get_contents($fOut);
+
+        } finally {
+            foreach ([$fIn, $fPem, $fOut, $fPass] as $f) {
+                if (file_exists($f)) @unlink($f);
+            }
+        }
     }
 
     // ─── Reforma Tributária EC 132/2023 ──────────────────────────────────────

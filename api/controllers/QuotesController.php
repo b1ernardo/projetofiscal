@@ -207,4 +207,26 @@ class QuotesController extends ApiController {
             $this->jsonResponse(["message" => "Erro ao atualizar orçamento: " . $e->getMessage()], 500);
         }
     }
+
+    public function updateStatus($id) {
+        $this->authenticate();
+        $data = $this->getPostData();
+
+        if (empty($data->status)) {
+            $this->jsonResponse(["message" => "Status é obrigatório"], 400);
+        }
+
+        try {
+            $stmt = $this->conn->prepare("UPDATE quotes SET status = :status WHERE id = :id AND company_id = :company_id");
+            $stmt->execute([
+                ":status" => $data->status,
+                ":id" => $id,
+                ":company_id" => $this->company_id
+            ]);
+
+            $this->jsonResponse(["message" => "Status atualizado com sucesso"]);
+        } catch (Exception $e) {
+            $this->jsonResponse(["message" => "Erro ao atualizar status: " . $e->getMessage()], 500);
+        }
+    }
 }

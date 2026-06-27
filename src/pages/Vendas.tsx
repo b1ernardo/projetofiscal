@@ -81,7 +81,7 @@ export default function Vendas() {
     };
 
     const handleViewDanfe = (fiscalId: string) => {
-        window.open(`${import.meta.env.VITE_API_URL}/fiscal/danfe/${fiscalId}?token=${localStorage.getItem('auth_token')}&t=${Date.now()}`, '_blank');
+        window.open(`${import.meta.env.VITE_API_URL}/fiscal/danfe/${fiscalId}?token=${encodeURIComponent(localStorage.getItem('auth_token') ?? '')}&t=${Date.now()}`, '_blank');
     };
 
     const openDetailsDialog = (saleId: string) => {

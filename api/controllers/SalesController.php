@@ -24,12 +24,18 @@ class SalesController extends ApiController {
                 $paymentLabel = implode(" / ", $labels);
             }
 
-            // 1. Inserir a venda
-            $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, customer_id, seller_id, total_amount, payment_method, created_by, status, discount, created_at) 
-                                          VALUES (:id, :company_id, :customer_id, :seller_id, :total, :method, :uid, 'completed', :discount, :created_at)");
+            // Calcular próximo número da venda POR EMPRESA (sequência independente)
+            $stmtNum = $this->conn->prepare("SELECT COALESCE(MAX(sale_number), 0) + 1 FROM sales WHERE company_id = :company_id FOR UPDATE");
+            $stmtNum->execute([':company_id' => $this->company_id]);
+            $saleNumber = (int)$stmtNum->fetchColumn();
+
+            // 1. Inserir a venda com o número calculado
+            $stmt = $this->conn->prepare("INSERT INTO sales (id, company_id, sale_number, customer_id, seller_id, total_amount, payment_method, created_by, status, discount, created_at)
+                                          VALUES (:id, :company_id, :sale_number, :customer_id, :seller_id, :total, :method, :uid, 'completed', :discount, :created_at)");
             $stmt->execute([
                 ":id" => $saleId,
                 ":company_id" => $this->company_id,
+                ":sale_number" => $saleNumber,
                 ":customer_id" => $data->customerId ?? null,
                 ":seller_id" => $data->sellerId ?? null,
                 ":total" => $data->total,
@@ -38,11 +44,6 @@ class SalesController extends ApiController {
                 ":discount" => $data->discount ?? 0,
                 ":created_at" => date('Y-m-d H:i:s')
             ]);
-
-            // Pegar o número sequencial da venda
-            $stmt = $this->conn->prepare("SELECT sale_number FROM sales WHERE id = :id AND company_id = :company_id");
-            $stmt->execute([':id' => $saleId, ':company_id' => $this->company_id]);
-            $saleNumber = $stmt->fetchColumn();
 
             // 2. Inserir pagamentos
             if (!empty($data->payments)) {
@@ -120,7 +121,7 @@ class SalesController extends ApiController {
             $stmt->execute([':company_id' => $this->company_id]);
             $register = $stmt->fetch();
 
-            if ($register && !empty($data->payments)) {
+            if (!empty($data->payments)) {
                 foreach ($data->payments as $p) {
                     // Se for "Conta", não entra no caixa (vai para contas a receber)
                     if (strtolower($p->methodName) === 'conta') {
@@ -155,17 +156,26 @@ class SalesController extends ApiController {
                         continue;
                     }
 
-                    $stmt = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by, created_at) VALUES (:id, :company_id, :reg_id, :amount, 'venda', :obs, :uid, :created_at)");
-                    $stmt->execute([
-                        ":id" => generateUUID(),
-                        ":company_id" => $this->company_id,
-                        ":reg_id" => $register['id'],
-                        ":amount" => $p->amount,
-                        ":obs" => "Venda #{$saleNumber} - " . $p->methodName,
-                        ":uid" => $auth['id'],
-                        ":created_at" => date('Y-m-d H:i:s')
-                    ]);
+                    // Para outros pagamentos, registra no caixa (se houver caixa aberto)
+                    if ($register) {
+                        $stmt = $this->conn->prepare("INSERT INTO cash_movements (id, company_id, cash_register_id, amount, type, observation, created_by, created_at) VALUES (:id, :company_id, :reg_id, :amount, 'venda', :obs, :uid, :created_at)");
+                        $stmt->execute([
+                            ":id" => generateUUID(),
+                            ":company_id" => $this->company_id,
+                            ":reg_id" => $register['id'],
+                            ":amount" => $p->amount,
+                            ":obs" => "Venda #{$saleNumber} - " . $p->methodName,
+                            ":uid" => $auth['id'],
+                            ":created_at" => date('Y-m-d H:i:s')
+                        ]);
+                    }
                 }
+            }
+
+            // 5. Atualizar status do orçamento, se houver quoteId
+            if (!empty($data->quoteId)) {
+                $stmtQ = $this->conn->prepare("UPDATE quotes SET status = 'converted' WHERE id = :qid AND company_id = :company_id");
+                $stmtQ->execute([':qid' => $data->quoteId, ':company_id' => $this->company_id]);
             }
 
             $this->conn->commit();

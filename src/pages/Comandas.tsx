@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Clock, CheckCircle, Loader2, Trash2 } from "lucide-react";
+import { Plus, Clock, CheckCircle, Loader2, Trash2, MessageSquare } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -41,27 +41,6 @@ export default function Comandas() {
     },
   });
 
-  const createMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/comandas`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-      });
-      return response.json();
-    },
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["comandas"] });
-      toast.success("Comanda aberta!");
-      setFormOpen(false);
-      setSelectedComandaId(res.id);
-      setDetailOpen(true);
-    },
-    onError: () => toast.error("Erro ao abrir comanda")
-  });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -147,6 +126,12 @@ export default function Comandas() {
                   </p>
                 </CardHeader>
                 <CardContent>
+                  {c.observation && (
+                    <div className="flex items-center gap-1.5 rounded bg-amber-50 border border-amber-200 px-2 py-1 text-xs text-amber-800 mb-2">
+                      <MessageSquare className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{c.observation}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-end">
                     <span className="text-sm text-muted-foreground">{c.itemCount} itens adicionados</span>
                     <span className="text-2xl font-bold text-primary">{formatCurrency(c.total)}</span>
@@ -201,7 +186,10 @@ export default function Comandas() {
       <ComandaFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
-        onSave={(data) => createMutation.mutate(data)}
+        onCreated={(id) => {
+          setSelectedComandaId(id);
+          setDetailOpen(true);
+        }}
       />
 
       {selectedComandaId && (

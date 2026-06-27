@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, UserPlus, RefreshCw, Loader2, Check, X, Settings, Users, Globe, ExternalLink } from "lucide-react";
+import { Building2, Plus, UserPlus, RefreshCw, Loader2, Check, X, Settings, Users, Globe, ExternalLink, Ban, ShieldCheck } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -206,6 +206,24 @@ export default function SuperAdmin() {
                 description: error.message,
                 variant: "destructive"
             });
+        }
+    });
+
+    const toggleCompanyMutation = useMutation({
+        mutationFn: async (company: Company) => {
+            const response = await fetch(`${API_URL}/superadmin/companies/${company.id}/toggle`, {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` },
+            });
+            if (!response.ok) throw new Error("Erro ao alterar status da empresa");
+            return response.json();
+        },
+        onSuccess: (data) => {
+            toast({ title: "Sucesso", description: data.message });
+            queryClient.invalidateQueries({ queryKey: ["super-companies"] });
+        },
+        onError: (error: any) => {
+            toast({ title: "Erro", description: error.message, variant: "destructive" });
         }
     });
 
@@ -470,6 +488,24 @@ export default function SuperAdmin() {
                                                 >
                                                     <UserPlus className="h-4 w-4 mr-1" />
                                                     Novo Acesso
+                                                </Button>
+                                                <Button
+                                                    variant={company.active ? "outline" : "outline"}
+                                                    size="sm"
+                                                    className={company.active
+                                                        ? "text-orange-600 border-orange-300 hover:bg-orange-50 hover:text-orange-700"
+                                                        : "text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"}
+                                                    onClick={() => {
+                                                        const acao = company.active ? "bloquear" : "desbloquear";
+                                                        if (confirm(`Deseja ${acao} o sistema da empresa "${company.name}"?`)) {
+                                                            toggleCompanyMutation.mutate(company);
+                                                        }
+                                                    }}
+                                                    disabled={toggleCompanyMutation.isPending}
+                                                >
+                                                    {company.active
+                                                        ? <><Ban className="h-4 w-4 mr-1" />Bloquear</>
+                                                        : <><ShieldCheck className="h-4 w-4 mr-1" />Desbloquear</>}
                                                 </Button>
                                                 <Button
                                                     variant="ghost"

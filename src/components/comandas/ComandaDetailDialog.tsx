@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Search, Loader2 } from "lucide-react";
+import { Plus, Trash2, Search, Loader2, MessageSquare } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CheckoutDialog } from "@/components/pdv/CheckoutDialog";
@@ -191,6 +191,13 @@ export function ComandaDetailDialog({ open, onOpenChange, comandaId }) {
                 </DialogHeader>
 
                 <div className="space-y-6 py-4">
+                    {comanda?.observation && (
+                        <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                            <MessageSquare className="h-4 w-4 shrink-0" />
+                            <span className="font-medium">{comanda.observation}</span>
+                        </div>
+                    )}
+
                     {/* Buscador de Produtos */}
                     <div className="space-y-2">
                         <Label>Adicionar Item</Label>

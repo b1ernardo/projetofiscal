@@ -95,6 +95,17 @@ class AuthController {
                     $password_matched = password_verify($data->password, $row['password_hash']) || ($data->password === $row['password_hash']);
 
                     if ($password_matched) {
+                        // Verifica se a empresa está bloqueada
+                        $stmtCompany = $this->conn->prepare("SELECT active FROM companies WHERE id = :cid");
+                        $stmtCompany->execute([':cid' => $row['company_id']]);
+                        $company = $stmtCompany->fetch(PDO::FETCH_ASSOC);
+                        if ($company && !(bool)$company['active']) {
+                            http_response_code(403);
+                            ob_clean();
+                            echo json_encode(["message" => "Sistema bloqueado. Entre em contato com o suporte."]);
+                            return;
+                        }
+
                         // Gera um token simples base64 (substituir por JWT em produção se necessário)
                         $token = base64_encode(json_encode([
                             "id" => $row['id'],

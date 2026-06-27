@@ -532,7 +532,7 @@ export default function Produtos() {
           }
         }}
         onSave={handleSave}
-        initialData={editProduct ? mapToFormData(editProduct) : null}
+        initialData={editProduct ? (isCloning ? { ...mapToFormData(editProduct), code: "", productCode: 0 } : mapToFormData(editProduct)) : null}
         title={isCloning ? `Clonar: ${editProduct?.name}` : editProduct ? "Editar Produto" : "Novo Produto"}
       />
 

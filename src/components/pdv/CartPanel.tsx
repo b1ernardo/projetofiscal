@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShoppingCart, Plus, Minus, Trash2, Pause, Percent } from "lucide-react";
+import { ShoppingCart, Plus, Minus, Trash2, Pause, Percent, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 interface CartItem {
@@ -26,6 +26,7 @@ interface CartPanelProps {
   onSaveToComanda: () => void;
   asCard?: boolean;
   maxDiscount?: number;
+  observation?: string;
 }
 
 export function CartPanel({
@@ -41,6 +42,7 @@ export function CartPanel({
   onSaveToComanda,
   asCard = true,
   maxDiscount = 100,
+  observation,
 }: CartPanelProps) {
   const [discountType, setDiscountType] = useState<"percent" | "value">("percent");
 
@@ -60,6 +62,13 @@ export function CartPanel({
           </Badge>
         )}
       </div>
+
+      {observation && (
+        <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-1.5 text-sm text-amber-800 mt-2">
+          <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-medium truncate">{observation}</span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto space-y-2 mt-3">
         {cart.length === 0 ? (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Receipt, FileText, MessageCircle } from "lucide-react";
+import { Receipt, FileText, MessageCircle, X } from "lucide-react";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 interface ReceiptOptionsDialogProps {
@@ -65,6 +65,14 @@ export function ReceiptOptionsDialog({ open, onOpenChange, onEmitNFCe, onPrintRe
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className={`${maxWidth} p-8 border-0 bg-transparent shadow-none`} hideClose>
                 <VisuallyHidden><DialogTitle>Opções de Impressão</DialogTitle></VisuallyHidden>
+                <div className="relative">
+                <button
+                    onClick={() => onOpenChange(false)}
+                    className="absolute -top-6 -right-6 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
+                    title="Fechar (Esc)"
+                >
+                    <X className="h-5 w-5" />
+                </button>
                 <div className={`grid ${gridCols} gap-4 bg-transparent`}>
                     {/* F4 */}
                     {showF4 && (
@@ -113,6 +121,7 @@ export function ReceiptOptionsDialog({ open, onOpenChange, onEmitNFCe, onPrintRe
                             <span className="text-base font-medium text-center">F6 | WhatsApp</span>
                         </Button>
                     )}
+                </div>
                 </div>
             </DialogContent>
         </Dialog>

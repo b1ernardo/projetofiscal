@@ -32,8 +32,9 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
           local-dir: dist/
-          server-dir: public_html/gestaosystemweb/
+          server-dir: /domains/gestaosystem.tech/public_html/gestaosystemweb/
           dangerous-clean-slate: false
 
       - name: 📂 Sync API to Hostinger
@@ -42,8 +43,9 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
           local-dir: api/
-          server-dir: public_html/gestaosystemweb/api/
+          server-dir: /domains/gestaosystem.tech/public_html/gestaosystemweb/api/
           dangerous-clean-slate: false
           exclude: |
             **/vendor/**

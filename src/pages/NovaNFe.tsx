@@ -14,7 +14,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Trash2, FileJson, Search, Check, ChevronsUpDown, Eye, Users, Save, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, FileJson, Search, Check, ChevronsUpDown, Eye, Users, Save, AlertTriangle, ShieldAlert, Truck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useProducts } from "@/hooks/useProducts";
 import { useCustomers } from "@/hooks/useCustomers";
@@ -56,8 +56,8 @@ export default function NovaNFe() {
                 indPres: "1", // 1-Operação presencial
                 idDest: "1", // 1-Dentro do Estado
                 refNFe: "",
-                dhEmit: new Date().toISOString().slice(0, 16), // data/hora de emissão
-                dhSaiEnt: new Date().toISOString().slice(0, 16)  // data/hora de saída/entrada
+                dhEmit: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16), // data/hora de emissão local
+                dhSaiEnt: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)  // data/hora de saída/entrada local
             },
             customer: {
                 documento: "",
@@ -74,13 +74,21 @@ export default function NovaNFe() {
                 telefone: ""
             },
             items: [
-                { code: "", name: "", ncm: "", cest: "", cfop_padrao: "5102", unit: "UN", quantity: 1, unit_price: 0, cst: "00", csosn: "102", origem: "0" }
+                { code: "", name: "", ncm: "", cest: "", cfop_padrao: "5102", unit: "UN", quantity: 1, unit_price: 0, cst: "00", csosn: "102", origem: "0", pICMS: 0, pPIS: 0, pCOFINS: 0, pesoL: 0, pesoB: 0, esp: "" }
             ],
             payments: [
                 { methodName: "DINHEIRO", amount: 0 }
             ],
             discount: 0,
-            informacoesComplementares: ""
+            informacoesComplementares: "",
+            transp: {
+                modFrete: "9",
+                razaoSocial: "", cnpj: "", ie: "",
+                logradouro: "", municipio: "", uf: "",
+                placa: "", ufVeiculo: "",
+                qVol: 1, esp: "", marca: "", nVol: "",
+                pesoL: 0, pesoB: 0, vFrete: 0, vSeg: 0, vOutro: 0
+            }
         }
     });
 
@@ -138,6 +146,15 @@ export default function NovaNFe() {
     const informacoesComplementares = watch("informacoesComplementares");
 
     const totalAmount = items.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) - discount;
+    const totalPeso = items.reduce((acc, item) => acc + ((Number(item.pesoB) || 0) * (Number(item.quantity) || 0)), 0);
+
+    // Update transport weights automatically
+    useEffect(() => {
+        if (totalPeso > 0) {
+            setValue("transp.pesoB", totalPeso);
+            setValue("transp.pesoL", totalPeso);
+        }
+    }, [totalPeso, setValue]);
 
     // ─── Carregar Rascunho ───────────────────────────────────────────────────────
     useEffect(() => {
@@ -402,11 +419,12 @@ export default function NovaNFe() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid w-full md:grid-cols-4">
+                    <TabsList className="grid w-full md:grid-cols-5">
                         <TabsTrigger value="dados">1. Dados da Nota</TabsTrigger>
                         <TabsTrigger value="destinatario">2. Destinatário</TabsTrigger>
                         <TabsTrigger value="produtos">3. Produtos</TabsTrigger>
-                        <TabsTrigger value="pagamento">4. Fechamento</TabsTrigger>
+                        <TabsTrigger value="transporte">4. Transporte</TabsTrigger>
+                        <TabsTrigger value="pagamento">5. Fechamento</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="dados" className="mt-4">
@@ -733,7 +751,11 @@ export default function NovaNFe() {
                                                                         unit_price: p.sale_price || 0,
                                                                         cst: p.cst || "00",
                                                                         csosn: p.csosn || "102",
-                                                                        origem: (p.origem ?? 0).toString() || "0"
+                                                                        origem: (p.origem ?? 0).toString() || "0",
+                                                                        pICMS: p.icms_aliquota || 0,
+                                                                        pPIS: p.pis_aliquota || 0,
+                                                                        pCOFINS: p.cofins_aliquota || 0,
+                                                                        pesoB: p.gross_weight || 0
                                                                     });
                                                                     setOpenProductSearch(false);
                                                                 }}
@@ -767,10 +789,10 @@ export default function NovaNFe() {
                                                 <TableHead className="w-[100px]">NCM</TableHead>
                                                 <TableHead className="w-[100px]">CST</TableHead>
                                                 <TableHead className="w-[100px]">CSOSN</TableHead>
-                                                <TableHead className="w-[80px]">CFOP</TableHead>
-                                                <TableHead className="w-[80px]">UND</TableHead>
-                                                <TableHead className="w-[80px]">Qtd</TableHead>
-                                                <TableHead className="w-[100px]">V. Unit.</TableHead>
+                                                <TableHead className="w-[60px]">CFOP</TableHead>
+                                                <TableHead className="w-[60px]">UND</TableHead>
+                                                <TableHead className="w-[120px]">Qtd</TableHead>
+                                                <TableHead className="w-[150px]">V. Unit.</TableHead>
                                                 <TableHead className="w-[100px]">Subtotal</TableHead>
                                                 <TableHead className="w-[50px]"></TableHead>
                                             </TableRow>
@@ -829,18 +851,22 @@ export default function NovaNFe() {
                                                                 </optgroup>
                                                             </select>
                                                         </TableCell>
-                                                        <TableCell className="p-1">
+                                                        <TableCell className="p-1 w-[60px]">
                                                             <Input {...register(`items.${index}.cfop_padrao`)} required className="h-8 text-sm" placeholder="5102" maxLength={4} />
                                                         </TableCell>
-                                                        <TableCell className="p-1">
+                                                        <TableCell className="p-1 w-[60px]">
                                                             <Input {...register(`items.${index}.unit`)} required className="h-8 text-sm uppercase" maxLength={3} />
                                                         </TableCell>
-                                                        <TableCell className="p-1">
-                                                            <Input type="number" step="0.0001" min="0.0001" {...register(`items.${index}.quantity`, { valueAsNumber: true })} required className="h-8 text-sm" />
+                                                        <TableCell className="p-1 w-[120px]">
+                                                            <Input type="number" step="0.0001" min="0.0001" {...register(`items.${index}.quantity`, { valueAsNumber: true })} required className="h-8 text-sm w-full" />
                                                         </TableCell>
-                                                        <TableCell className="p-1">
-                                                            <Input type="number" step="0.01" min="0" {...register(`items.${index}.unit_price`, { valueAsNumber: true })} required className="h-8 text-sm" />
+                                                        <TableCell className="p-1 w-[150px]">
+                                                            <Input type="number" step="0.01" min="0" {...register(`items.${index}.unit_price`, { valueAsNumber: true })} required className="h-8 text-sm w-full" />
                                                         </TableCell>
+                                                        <input type="hidden" {...register(`items.${index}.pICMS`, { valueAsNumber: true })} />
+                                                        <input type="hidden" {...register(`items.${index}.pPIS`, { valueAsNumber: true })} />
+                                                        <input type="hidden" {...register(`items.${index}.pCOFINS`, { valueAsNumber: true })} />
+                                                        <input type="hidden" {...register(`items.${index}.pesoB`, { valueAsNumber: true })} />
                                                         <TableCell className="p-1 text-right text-sm font-medium">
                                                             R$ {sub.toFixed(2)}
                                                         </TableCell>
@@ -860,6 +886,121 @@ export default function NovaNFe() {
                         </Card>
                         <div className="flex justify-between mt-4">
                             <Button type="button" variant="outline" onClick={() => setActiveTab("destinatario")}>Voltar</Button>
+                            <Button type="button" onClick={() => setActiveTab("transporte")}>Próxima Etapa</Button>
+                        </div>
+                    </TabsContent>
+
+                    {/* ─── Aba 4: Transporte ─────────────────────────────────────────────── */}
+                    <TabsContent value="transporte" className="mt-4 space-y-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><Truck className="h-5 w-5" /> Transporte e Frete</CardTitle>
+                                <CardDescription>Informações de frete, transportadora e volumes.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {/* Modal de Frete */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label>Modalidade do Frete</Label>
+                                        <Select onValueChange={v => setValue("transp.modFrete", v)} value={watch("transp.modFrete")}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="0">0 - Por conta do Emitente</SelectItem>
+                                                <SelectItem value="1">1 - Por conta do Destinatário</SelectItem>
+                                                <SelectItem value="2">2 - Por conta de Terceiros</SelectItem>
+                                                <SelectItem value="9">9 - Sem Frete</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Valor do Frete (R$)</Label>
+                                        <Input type="number" step="0.01" min="0" {...register("transp.vFrete", { valueAsNumber: true })} className="h-9" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Seguro (R$)</Label>
+                                        <Input type="number" step="0.01" min="0" {...register("transp.vSeg", { valueAsNumber: true })} className="h-9" />
+                                    </div>
+                                </div>
+
+                                {/* Transportadora */}
+                                {watch("transp.modFrete") !== "9" && (
+                                    <div className="border rounded-lg p-4 space-y-4">
+                                        <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Dados da Transportadora</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="space-y-2 md:col-span-2">
+                                                <Label>Razão Social</Label>
+                                                <Input {...register("transp.razaoSocial")} placeholder="Nome da transportadora" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>CNPJ / CPF</Label>
+                                                <Input {...register("transp.cnpj")} placeholder="00.000.000/0000-00" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>IE</Label>
+                                                <Input {...register("transp.ie")} placeholder="Inscrição Estadual" />
+                                            </div>
+                                            <div className="space-y-2 md:col-span-2">
+                                                <Label>Endereço</Label>
+                                                <Input {...register("transp.logradouro")} placeholder="Rua, número, bairro" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Município</Label>
+                                                <Input {...register("transp.municipio")} placeholder="Cidade" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>UF</Label>
+                                                <Input {...register("transp.uf")} placeholder="SP" maxLength={2} className="uppercase" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Placa do Veículo</Label>
+                                                <Input {...register("transp.placa")} placeholder="AAA-0000" className="uppercase" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>UF do Veículo</Label>
+                                                <Input {...register("transp.ufVeiculo")} placeholder="SP" maxLength={2} className="uppercase" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Volumes */}
+                                <div className="border rounded-lg p-4 space-y-4">
+                                    <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Volumes / Embalagem</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Qtd. Volumes</Label>
+                                            <Input type="number" min="0" {...register("transp.qVol", { valueAsNumber: true })} className="h-9" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Espécie</Label>
+                                            <Input {...register("transp.esp")} placeholder="CX, SC, PT, UN..." className="h-9 uppercase" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Marca</Label>
+                                            <Input {...register("transp.marca")} placeholder="Marca dos volumes" className="h-9" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Numeração</Label>
+                                            <Input {...register("transp.nVol")} placeholder="Nº dos volumes" className="h-9" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Peso Líquido (kg)</Label>
+                                            <Input type="number" step="0.001" min="0" {...register("transp.pesoL", { valueAsNumber: true })} className="h-9" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Peso Bruto (kg)</Label>
+                                            <Input type="number" step="0.001" min="0" {...register("transp.pesoB", { valueAsNumber: true })} className="h-9" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Outras Despesas (R$)</Label>
+                                            <Input type="number" step="0.01" min="0" {...register("transp.vOutro", { valueAsNumber: true })} className="h-9" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <div className="flex justify-between mt-4">
+                            <Button type="button" variant="outline" onClick={() => setActiveTab("produtos")}>Voltar</Button>
                             <Button type="button" onClick={() => setActiveTab("pagamento")}>Próxima Etapa</Button>
                         </div>
                     </TabsContent>

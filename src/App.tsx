@@ -33,6 +33,7 @@ import GestaoDelivery from "./pages/GestaoDelivery";
 import Orcamentos from "./pages/Orcamentos";
 import ServiceOrders from "./pages/ServiceOrders";
 import ServiceOrderForm from "./pages/ServiceOrderForm";
+import PlanoDeContas from "./pages/PlanoDeContas";
 
 const queryClient = new QueryClient();
 
@@ -125,6 +126,7 @@ const App = () => (
             <Route path="/relatorios" element={<ProtectedRoute module="relatorios"><Relatorios /></ProtectedRoute>} />
             <Route path="/contas-pagar" element={<ProtectedRoute module="contas_pagar"><ContasPagar /></ProtectedRoute>} />
             <Route path="/contas-receber" element={<ProtectedRoute module="contas_receber"><ContasReceber /></ProtectedRoute>} />
+            <Route path="/plano-contas" element={<ProtectedRoute module="finances"><PlanoDeContas /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute module="configuracoes"><Configuracoes /></ProtectedRoute>} />
             <Route path="/superadmin" element={<ProtectedRoute superOnly><SuperAdmin /></ProtectedRoute>} />
             <Route path="/delivery/:slug?" element={<Delivery />} />

@@ -61,6 +61,7 @@ const financialItems: MenuItem[] = [
   { title: "Caixa Diário", url: "/caixa", icon: DollarSign, permission: "finances" },
   { title: "Contas a Pagar", url: "/contas-pagar", icon: ArrowDownCircle, permission: "finances" },
   { title: "Contas a Receber", url: "/contas-receber", icon: ArrowUpCircle, permission: "finances" },
+  { title: "Plano de Contas", url: "/plano-contas", icon: BookOpen, permission: "finances" },
 ];
 
 const fiscalItems: MenuItem[] = [
