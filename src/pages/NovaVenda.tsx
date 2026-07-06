@@ -674,7 +674,7 @@ export default function NovaVenda() {
                 title="Novo Produto"
                 onSave={handleSaveProduct}
             />
-            <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} total={total} onConfirm={handleConfirmCheckout} />
+            <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} total={total} onConfirm={handleConfirmCheckout} initialCustomerId={selectedCustomer?.id} />
             <ReceiptOptionsDialog
                 open={receiptOptionsOpen}
                 onOpenChange={setReceiptOptionsOpen}

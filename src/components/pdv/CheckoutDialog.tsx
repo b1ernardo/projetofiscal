@@ -22,6 +22,7 @@ interface CheckoutDialogProps {
   onOpenChange: (open: boolean) => void;
   total: number;
   onConfirm: (payments: PaymentEntry[], customerId?: string) => void | Promise<void>;
+  initialCustomerId?: string;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -34,7 +35,7 @@ const defaultIcon = <CreditCard className="h-5 w-5" />;
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-export function CheckoutDialog({ open, onOpenChange, total, onConfirm }: CheckoutDialogProps) {
+export function CheckoutDialog({ open, onOpenChange, total, onConfirm, initialCustomerId }: CheckoutDialogProps) {
   const [methods, setMethods] = useState<{ id: string; name: string }[]>([]);
   const [payments, setPayments] = useState<{ methodId: string; methodName: string; amount: number }[]>([]);
   const [customerId, setCustomerId] = useState<string | undefined>(undefined);
@@ -58,7 +59,7 @@ export function CheckoutDialog({ open, onOpenChange, total, onConfirm }: Checkou
   useEffect(() => {
     if (open) {
       setPayments([]);
-      setCustomerId(undefined);
+      setCustomerId(initialCustomerId || undefined);
       setNumInstallments(1);
       setIntervalDays(30);
       fetch(`${import.meta.env.VITE_API_URL}/payment_methods`, {
