@@ -990,7 +990,7 @@ Obrigado pela preferência! Sujeito a alteração de preços.`,`https://wa.me/?t
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; font-weight: bold; color: #333; margin: 0; padding: 0; background: #fff; }
     .copy { width: 210mm; padding: 9mm 14mm 6mm; overflow: hidden; position: relative; }
     .via-badge { position: absolute; top: 9mm; right: 14mm; font-size: 7pt; font-weight: 900; color: #555; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #999; padding: 2px 7px; border-radius: 3px; }
-    .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #334155; padding-bottom: 7px; margin-bottom: 8px; padding-right: 110px; }
+    .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #334155; padding-bottom: 7px; margin-top: 7mm; margin-bottom: 8px; padding-right: 110px; }
     table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 9pt; }
     th { background: #f1f5f9; color: #475569; font-weight: 900; text-transform: uppercase; font-size: 8pt; padding: 5px 7px; border: 1px solid #dde; }
     td { padding: 4px 7px; border: 1px solid #dde; }
