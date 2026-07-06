@@ -373,7 +373,7 @@ export const printReceipt = async (data: ReceiptData, preOpenedWindow?: Window |
   setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 };
 
-// ── Comprovante A4 ────────────────────────────────────────────────────────
+// ── Comprovante A4 (2 vias) ───────────────────────────────────────────────
 export const printReceiptA4 = async (data: ReceiptData) => {
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;
@@ -381,43 +381,78 @@ export const printReceiptA4 = async (data: ReceiptData) => {
   const whatsappUrl = await getWhatsappUrl(data);
   const { customerName, customerDocument } = data;
   const subtotal = data.cart.reduce((a, i) => a + i.price * i.quantity, 0);
+
+  const renderCopy = (via: string) => `
+    <div class="copy">
+      <div class="via-badge">${via}</div>
+      <div class="hdr">
+        <div style="display:flex;gap:12px;align-items:center">
+          ${logoSrc ? `<img src="${logoSrc}" style="width:55px;height:55px;object-fit:contain" onerror="this.style.display='none'"/>` : ''}
+          <div>
+            <div style="font-size:13pt;font-weight:900;color:#003366">${companyName}</div>
+            <div style="font-size:8pt;color:#555;margin-top:2px">${companyAddress}</div>
+            <div style="font-size:8pt;color:#555">${companyCnpjIe}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13pt;font-weight:900">COMPROVANTE DE VENDA</div>
+          <div style="font-size:9pt;margin-top:3px"><b>#${data.saleNumber}</b> &nbsp;|&nbsp; ${new Date(data.date).toLocaleString('pt-BR')}</div>
+          ${customerName ? `<div style="font-size:9pt;margin-top:2px">Cliente: <b>${customerName}</b>${customerDocument ? `<br/><span style="font-size:8pt">CPF/CNPJ: ${customerDocument}</span>` : ''}</div>` : ''}
+        </div>
+      </div>
+      <table>
+        <thead><tr>
+          <th class="tl">Produto</th>
+          <th class="tc" style="width:50px">Qtd</th>
+          <th class="tr" style="width:80px">Unit.</th>
+          <th class="tr" style="width:90px">Total</th>
+        </tr></thead>
+        <tbody>${data.cart.map(i => `<tr><td class="tl">${i.name || 'Produto'}</td><td class="tc">${i.quantity}</td><td class="tr">${Number(i.price).toFixed(2)}</td><td class="tr">${(i.price * i.quantity).toFixed(2)}</td></tr>`).join('')}</tbody>
+      </table>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px">
+        <div style="font-size:8.5pt;color:#444">
+          ${data.payments.map(p => `<div>${p.methodName}: <b>${formatCurrency(p.amount)}</b></div>`).join('')}
+        </div>
+        <div style="text-align:right;font-size:9pt">
+          <div>Subtotal: <b>${formatCurrency(subtotal)}</b></div>
+          ${data.discount > 0 ? `<div>Desconto: <b>${formatCurrency(data.discount)}</b></div>` : ''}
+          <div style="font-size:14pt;font-weight:900;color:#000;margin-top:3px">TOTAL: ${formatCurrency(data.total)}</div>
+        </div>
+      </div>
+      <div class="sig-area">
+        <div class="sig-line">Assinatura do Cliente: ___________________________________</div>
+        <div class="sig-line">Recebido em: ______ / ______ / __________</div>
+      </div>
+    </div>`;
+
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Venda #${data.saleNumber} - A4</title>
-  <style>body{font-family:'Segoe UI',Arial,sans-serif;font-size:14px;font-weight:bold;padding:20px;color:#333}
-  .container{max-width:800px;margin:0 auto;border:1px solid #ddd;padding:20px;border-radius:8px}
-  .header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:20px}
-  table{width:100%;border-collapse:collapse;margin-top:20px}
-  th,td{border:1px solid #ddd;padding:10px;text-align:right}
-  th.tl,td.tl{text-align:left}th{background:#f4f4f5;font-weight:bold}
-  @media print{.no-print{display:none}.container{border:none}}</style></head><body>
-  <div class="no-print" style="margin-bottom:20px">
-    <button onclick="window.print()" style="padding:10px 20px;background:#16a34a;color:white;border:none;border-radius:4px;font-weight:bold;cursor:pointer">🖨️ IMPRIMIR A4</button>
-    <button onclick="window.open('${whatsappUrl}','_blank')" style="padding:10px 20px;background:#25D366;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:8px">💬 WHATSAPP</button>
-    <button onclick="window.close()" style="padding:10px 20px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;margin-left:8px">FECHAR</button>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; font-weight: bold; color: #333; margin: 0; padding: 0; background: #fff; }
+    .copy { width: 210mm; padding: 9mm 14mm 6mm; overflow: hidden; position: relative; }
+    .via-badge { position: absolute; top: 9mm; right: 14mm; font-size: 7pt; font-weight: 900; color: #555; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #999; padding: 2px 7px; border-radius: 3px; }
+    .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #334155; padding-bottom: 7px; margin-bottom: 8px; padding-right: 110px; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 9pt; }
+    th { background: #f1f5f9; color: #475569; font-weight: 900; text-transform: uppercase; font-size: 8pt; padding: 5px 7px; border: 1px solid #dde; }
+    td { padding: 4px 7px; border: 1px solid #dde; }
+    .tl { text-align: left; } .tc { text-align: center; } .tr { text-align: right; }
+    .sig-area { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 14px; border-top: 1px solid #ccc; padding-top: 8px; }
+    .sig-line { font-size: 8.5pt; color: #444; padding-bottom: 12px; }
+    .cut-line { text-align: center; font-size: 8.5pt; color: #777; letter-spacing: 3px; font-family: monospace; margin: 0; padding: 4px 0; border-top: 1.5px dashed #999; border-bottom: 1.5px dashed #999; }
+    .no-print { position: fixed; top: 0; left: 0; right: 0; background: #0f172a; padding: 10px; display: flex; justify-content: center; gap: 12px; z-index: 1000; }
+    .btn { padding: 8px 18px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px; }
+    @media print { .no-print { display: none !important; } body { margin: 0; } }
+  </style></head><body>
+  <div class="no-print">
+    <button class="btn" style="background:#16a34a;color:white" onclick="window.print()">🖨️ IMPRIMIR A4 (2 VIAS)</button>
+    <button class="btn" style="background:#25D366;color:white" onclick="window.open('${whatsappUrl}','_blank')">💬 WHATSAPP</button>
+    <button class="btn" style="background:#ef4444;color:white" onclick="window.close()">✕ FECHAR</button>
   </div>
-  <div class="container">
-    <div class="header">
-      <div style="display:flex;gap:15px;align-items:center">
-        ${logoSrc ? `<img src="${logoSrc}" style="width:80px;height:80px;object-fit:contain" onerror="this.style.display='none'"/>` : ''}
-        <div><h1 style="margin:0;color:#003366;font-size:18pt">${companyName}</h1>
-             <p style="margin:5px 0 0 0;color:#555">${companyAddress} | ${companyCnpjIe}</p></div>
-      </div>
-      <div style="text-align:right">
-        <h2 style="margin:0">COMPROVANTE DE VENDA</h2>
-        <p><b>#${data.saleNumber}</b> | ${new Date(data.date).toLocaleString('pt-BR')}</p>
-        ${customerName ? `<p style="margin:2px 0">Cliente: <b>${customerName}</b>${customerDocument ? `<br/>CPF/CNPJ: ${customerDocument}` : ''}</p>` : ''}
-      </div>
-    </div>
-    <table><thead><tr><th class="tl">Produto</th><th>Qtd</th><th>Unit.</th><th>Total</th></tr></thead>
-    <tbody>${data.cart.map(i=>`<tr><td class="tl">${i.name||'Produto'}</td><td>${i.quantity}</td><td>${Number(i.price).toFixed(2)}</td><td>${(i.price*i.quantity).toFixed(2)}</td></tr>`).join('')}</tbody></table>
-    <div style="margin-top:20px;text-align:right;font-size:14pt">
-      <p>Subtotal: <b>${formatCurrency(subtotal)}</b></p>
-      <p>Desconto: <b>${formatCurrency(data.discount)}</b></p>
-      <h2 style="color:#000;margin-top:10px">TOTAL: ${formatCurrency(data.total)}</h2>
-    </div>
-    <div style="margin-top:20px;display:flex;gap:20px;justify-content:flex-end">
-      ${data.payments.map(p=>`<div style="padding:10px;background:#f8fafc;border:1px solid #ddd;border-radius:4px">${p.methodName}: <b>${formatCurrency(p.amount)}</b></div>`).join('')}
-    </div>
-  </div></body></html>`;
+  ${renderCopy('1ª VIA — ESTABELECIMENTO')}
+  <div class="cut-line">✂ - - - - - - - - - - - RECORTE AQUI - - - - - - - - - - - ✂</div>
+  ${renderCopy('2ª VIA — CLIENTE')}
+  </body></html>`;
   printWindow.document.open(); printWindow.document.write(html); printWindow.document.close();
 };
 
