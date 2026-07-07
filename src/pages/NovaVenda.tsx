@@ -29,7 +29,8 @@ import { SaleFormatDialog } from "@/components/pdv/SaleFormatDialog";
 import { useFiscal } from "@/hooks/useFiscal";
 import { cn } from "@/lib/utils";
 import { QuoteDialog } from "@/components/pdv/QuoteDialog";
-import { FileText } from "lucide-react";
+import { ImportQuoteDialog } from "@/components/pdv/ImportQuoteDialog";
+import { FileText, FolderOpen } from "lucide-react";
 
 export default function NovaVenda() {
     const navigate = useNavigate();
@@ -57,6 +58,8 @@ export default function NovaVenda() {
     const [checkoutOpen, setCheckoutOpen] = useState(false);
     const [receiptOptionsOpen, setReceiptOptionsOpen] = useState(false);
     const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+    const [importQuoteOpen, setImportQuoteOpen] = useState(false);
+    const [importedQuoteId, setImportedQuoteId] = useState<string | null>(null);
     const [lastSaleData, setLastSaleData] = useState<any>(null);
 
     // Form states
@@ -169,6 +172,39 @@ export default function NovaVenda() {
     const handleSelectSeller = (seller: any) => {
         setSelectedSeller(seller);
         setOpenSellerSearch(false);
+    };
+
+    const handleImportQuote = async (quoteId: string) => {
+        setLoadingQuote(true);
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/quotes/${quoteId}`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem("auth_token")}` },
+            });
+            if (!res.ok) throw new Error("Erro ao carregar orçamento");
+            const data = await res.json();
+
+            if (data.customer_id) {
+                setSelectedCustomer({ id: data.customer_id, name: data.customer_name, cpf_cnpj: "" });
+            }
+            if (data.seller_id) {
+                const seller = sellers.find((s: any) => s.id === data.seller_id);
+                if (seller) setSelectedSeller(seller);
+            }
+            setDesconto(Number(data.discount) || 0);
+            setItems(data.items.map((it: any) => ({
+                product_id: it.product_id,
+                name: it.product_name,
+                quantity: Number(it.quantity),
+                unit_price: Number(it.unit_price),
+                unit: it.product_unit,
+            })));
+            setImportedQuoteId(quoteId);
+            toast.success(`Orçamento #${data.quote_number} importado!`);
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setLoadingQuote(false);
+        }
     };
 
     // Helper to add item with suffix/multiplier
@@ -353,7 +389,7 @@ export default function NovaVenda() {
             discount: desconto,
             customerId: finalCustomerId,
             sellerId: selectedSeller?.id,
-            quoteId: editingQuoteId || undefined
+            quoteId: editingQuoteId || importedQuoteId || undefined
         };
 
         try {
@@ -648,6 +684,10 @@ export default function NovaVenda() {
                     <Button onClick={() => setCustomerModalOpen(true)} className="bg-[#3b82f6] text-white text-xs sm:text-sm h-9">
                         <Users className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">F9 |</span> Pessoas
                     </Button>
+                    <Button onClick={() => setImportQuoteOpen(true)}
+                        className="bg-[#7c3aed] text-white text-xs sm:text-sm h-9">
+                        <FolderOpen className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">Importar Orç.</span>
+                    </Button>
                     <Button onClick={() => { if (items.length === 0) { toast.error("Adicione itens."); return; } setQuoteDialogOpen(true); }}
                         className="bg-[#3b82f6] text-white text-xs sm:text-sm h-9">
                         <FileText className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">Orçamento</span>
@@ -674,6 +714,7 @@ export default function NovaVenda() {
                 title="Novo Produto"
                 onSave={handleSaveProduct}
             />
+            <ImportQuoteDialog open={importQuoteOpen} onOpenChange={setImportQuoteOpen} onImport={handleImportQuote} />
             <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} total={total} onConfirm={handleConfirmCheckout} initialCustomerId={selectedCustomer?.id} />
             <ReceiptOptionsDialog
                 open={receiptOptionsOpen}
