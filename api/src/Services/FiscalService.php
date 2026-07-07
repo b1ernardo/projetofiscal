@@ -691,7 +691,13 @@ class FiscalService {
 
         $detpag->tPag = $tPag;
         $detpag->vPag = number_format($sale['total_amount'], 2, '.', '');
-        
+
+        // tPag=99 exige xPag (descrição) - Rejeição SEFAZ [441]
+        if ($tPag === '99') {
+            $descricao = trim($sale['payment_method'] ?? 'Outros');
+            $detpag->xPag = mb_substr($descricao, 0, 60) ?: 'Outros';
+        }
+
         // Se for cartão ou PIX através de terminal não integrado, informar tpIntegra = 2
         // Isso resolve a Rejeição 391 da SEFAZ
         if ($tPag === '03' || $tPag === '04' || $tPag === '17') {
