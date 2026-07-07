@@ -367,7 +367,7 @@ export default function NovaVenda() {
             return;
         }
 
-        let finalCustomerId = confirmCustomerId === 'none' ? undefined : confirmCustomerId;
+        let finalCustomerId = (confirmCustomerId === 'none' || confirmCustomerId === 'default') ? undefined : confirmCustomerId;
         if (!finalCustomerId && selectedCustomer?.id && selectedCustomer.id !== "default") {
             finalCustomerId = selectedCustomer.id;
         }
@@ -715,7 +715,7 @@ export default function NovaVenda() {
                 onSave={handleSaveProduct}
             />
             <ImportQuoteDialog open={importQuoteOpen} onOpenChange={setImportQuoteOpen} onImport={handleImportQuote} />
-            <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} total={total} onConfirm={handleConfirmCheckout} initialCustomerId={selectedCustomer?.id} />
+            <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} total={total} onConfirm={handleConfirmCheckout} initialCustomerId={selectedCustomer?.id !== "default" ? selectedCustomer?.id : undefined} />
             <ReceiptOptionsDialog
                 open={receiptOptionsOpen}
                 onOpenChange={setReceiptOptionsOpen}
