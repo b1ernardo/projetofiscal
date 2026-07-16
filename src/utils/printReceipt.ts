@@ -384,19 +384,19 @@ export const printReceiptA4 = async (data: ReceiptData) => {
 
   const renderCopy = (via: string, showSig = true) => `
     <div class="copy">
-      <div class="via-badge">${via}</div>
       <div class="hdr">
-        <div style="display:flex;gap:12px;align-items:center">
-          ${logoSrc ? `<img src="${logoSrc}" style="width:55px;height:55px;object-fit:contain" onerror="this.style.display='none'"/>` : ''}
-          <div>
-            <div style="font-size:13pt;font-weight:900;color:#003366">${companyName}</div>
-            <div style="font-size:8pt;color:#555;margin-top:2px">${companyAddress}</div>
-            <div style="font-size:8pt;color:#555">${companyCnpjIe}</div>
+        <div style="display:flex;gap:12px;align-items:center;flex:1;min-width:0">
+          ${logoSrc ? `<img src="${logoSrc}" style="width:50px;height:50px;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'"/>` : ''}
+          <div style="min-width:0">
+            <div style="font-size:12pt;font-weight:900;color:#003366;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${companyName}</div>
+            <div style="font-size:7.5pt;color:#555;margin-top:2px">${companyAddress}</div>
+            <div style="font-size:7.5pt;color:#555">${companyCnpjIe}</div>
           </div>
         </div>
-        <div style="text-align:right">
-          <div style="font-size:13pt;font-weight:900">COMPROVANTE DE VENDA</div>
-          <div style="font-size:9pt;margin-top:3px"><b>#${data.saleNumber}</b> &nbsp;|&nbsp; ${new Date(data.date).toLocaleString('pt-BR')}</div>
+        <div style="text-align:right;flex-shrink:0;padding-left:12px">
+          <div class="via-badge">${via}</div>
+          <div style="font-size:12pt;font-weight:900;margin-top:4px">COMPROVANTE DE VENDA</div>
+          <div style="font-size:9pt;margin-top:2px"><b>#${data.saleNumber}</b> &nbsp;|&nbsp; ${new Date(data.date).toLocaleString('pt-BR')}</div>
           ${customerName ? `<div style="font-size:9pt;margin-top:2px">Cliente: <b>${customerName}</b>${customerDocument ? `<br/><span style="font-size:8pt">CPF/CNPJ: ${customerDocument}</span>` : ''}</div>` : ''}
         </div>
       </div>
@@ -431,9 +431,9 @@ export const printReceiptA4 = async (data: ReceiptData) => {
     @page { size: A4; margin: 0; }
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; font-weight: bold; color: #333; margin: 0; padding: 0; background: #fff; }
-    .copy { width: 210mm; height: 145mm; padding: 4mm 14mm 6mm; overflow: hidden; position: relative; }
-    .via-badge { position: absolute; top: 4mm; right: 14mm; font-size: 7pt; font-weight: 900; color: #555; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #999; padding: 2px 7px; border-radius: 3px; }
-    .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #334155; padding-bottom: 7px; margin-top: 7mm; margin-bottom: 6px; padding-right: 110px; }
+    .copy { width: 210mm; height: 145mm; padding: 5mm 14mm 6mm; overflow: hidden; }
+    .via-badge { display: inline-block; font-size: 7pt; font-weight: 900; color: #555; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #999; padding: 2px 8px; border-radius: 3px; }
+    .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #334155; padding-bottom: 7px; margin-bottom: 6px; }
     table { width: 100%; border-collapse: collapse; margin: 4px 0; font-size: 9pt; }
     th { background: #f1f5f9; color: #475569; font-weight: 900; text-transform: uppercase; font-size: 8pt; padding: 4px 7px; border: 1px solid #dde; }
     td { padding: 3px 7px; border: 1px solid #dde; }
