@@ -947,7 +947,7 @@ Obrigado pela preferência! Sujeito a alteração de preços.`,`https://wa.me/?t
     Tributos totais incidentes (Lei Federal 12.741/2012)<br/>
     OBRIGADO PELA PREFERÊNCIA!
   </div>
-  </body></html>`,w=new Blob([N],{type:"text/html;charset=utf-8"}),S=URL.createObjectURL(w);r.location.replace(S),setTimeout(()=>URL.revokeObjectURL(S),6e4)},RT=async e=>{const t=window.open("","_blank");if(!t)return;const{companyName:r,companyAddress:n,companyCnpjIe:a,logoSrc:i}=await Fc(),o=await a0(e),{customerName:l,customerDocument:c}=e,u=e.cart.reduce((h,p)=>h+p.price*p.quantity,0),d=h=>`
+  </body></html>`,w=new Blob([N],{type:"text/html;charset=utf-8"}),S=URL.createObjectURL(w);r.location.replace(S),setTimeout(()=>URL.revokeObjectURL(S),6e4)},RT=async e=>{const t=window.open("","_blank");if(!t)return;const{companyName:r,companyAddress:n,companyCnpjIe:a,logoSrc:i}=await Fc(),o=await a0(e),{customerName:l,customerDocument:c}=e,u=e.cart.reduce((h,p)=>h+p.price*p.quantity,0),d=(h,p=!0)=>`
     <div class="copy">
       <div class="via-badge">${h}</div>
       <div class="hdr">
@@ -972,11 +972,11 @@ Obrigado pela preferência! Sujeito a alteração de preços.`,`https://wa.me/?t
           <th class="tr" style="width:80px">Unit.</th>
           <th class="tr" style="width:90px">Total</th>
         </tr></thead>
-        <tbody>${e.cart.map(p=>`<tr><td class="tl">${p.name||"Produto"}</td><td class="tc">${p.quantity}</td><td class="tr">${Number(p.price).toFixed(2)}</td><td class="tr">${(p.price*p.quantity).toFixed(2)}</td></tr>`).join("")}</tbody>
+        <tbody>${e.cart.map(m=>`<tr><td class="tl">${m.name||"Produto"}</td><td class="tc">${m.quantity}</td><td class="tr">${Number(m.price).toFixed(2)}</td><td class="tr">${(m.price*m.quantity).toFixed(2)}</td></tr>`).join("")}</tbody>
       </table>
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px">
         <div style="font-size:8.5pt;color:#444">
-          ${e.payments.map(p=>`<div>${p.methodName}: <b>${ir(p.amount)}</b></div>`).join("")}
+          ${e.payments.map(m=>`<div>${m.methodName}: <b>${ir(m.amount)}</b></div>`).join("")}
         </div>
         <div style="text-align:right;font-size:9pt">
           <div>Subtotal: <b>${ir(u)}</b></div>
@@ -984,25 +984,26 @@ Obrigado pela preferência! Sujeito a alteração de preços.`,`https://wa.me/?t
           <div style="font-size:14pt;font-weight:900;color:#000;margin-top:3px">TOTAL: ${ir(e.total)}</div>
         </div>
       </div>
+      ${p?`
       <div class="sig-area">
         <div class="sig-line">Assinatura do Cliente: ___________________________________</div>
         <div class="sig-line">Recebido em: ______ / ______ / __________</div>
-      </div>
+      </div>`:""}
     </div>`,f=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Venda #${e.saleNumber} - A4</title>
   <style>
     @page { size: A4; margin: 0; }
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; font-weight: bold; color: #333; margin: 0; padding: 0; background: #fff; }
-    .copy { width: 210mm; padding: 9mm 14mm 6mm; overflow: hidden; position: relative; }
-    .via-badge { position: absolute; top: 9mm; right: 14mm; font-size: 7pt; font-weight: 900; color: #555; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #999; padding: 2px 7px; border-radius: 3px; }
-    .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #334155; padding-bottom: 7px; margin-top: 7mm; margin-bottom: 8px; padding-right: 110px; }
-    table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 9pt; }
-    th { background: #f1f5f9; color: #475569; font-weight: 900; text-transform: uppercase; font-size: 8pt; padding: 5px 7px; border: 1px solid #dde; }
-    td { padding: 4px 7px; border: 1px solid #dde; }
+    .copy { width: 210mm; height: 145mm; padding: 4mm 14mm 6mm; overflow: hidden; position: relative; }
+    .via-badge { position: absolute; top: 4mm; right: 14mm; font-size: 7pt; font-weight: 900; color: #555; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #999; padding: 2px 7px; border-radius: 3px; }
+    .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #334155; padding-bottom: 7px; margin-top: 7mm; margin-bottom: 6px; padding-right: 110px; }
+    table { width: 100%; border-collapse: collapse; margin: 4px 0; font-size: 9pt; }
+    th { background: #f1f5f9; color: #475569; font-weight: 900; text-transform: uppercase; font-size: 8pt; padding: 4px 7px; border: 1px solid #dde; }
+    td { padding: 3px 7px; border: 1px solid #dde; }
     .tl { text-align: left; } .tc { text-align: center; } .tr { text-align: right; }
-    .sig-area { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 14px; border-top: 1px solid #ccc; padding-top: 8px; }
-    .sig-line { font-size: 8.5pt; color: #444; padding-bottom: 12px; }
-    .cut-line { text-align: center; font-size: 8.5pt; color: #777; letter-spacing: 3px; font-family: monospace; margin: 0; padding: 4px 0; border-top: 1.5px dashed #999; border-bottom: 1.5px dashed #999; }
+    .sig-area { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 10px; border-top: 1px solid #ccc; padding-top: 6px; }
+    .sig-line { font-size: 8.5pt; color: #444; padding-bottom: 10px; }
+    .cut-line { height: 7mm; display: flex; align-items: center; justify-content: center; font-size: 8pt; color: #888; letter-spacing: 3px; font-family: monospace; border-top: 1.5px dashed #aaa; border-bottom: 1.5px dashed #aaa; }
     .no-print { position: fixed; top: 0; left: 0; right: 0; background: #0f172a; padding: 10px; display: flex; justify-content: center; gap: 12px; z-index: 1000; }
     .btn { padding: 8px 18px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px; }
     @media print { .no-print { display: none !important; } body { margin: 0; } }
@@ -1012,9 +1013,9 @@ Obrigado pela preferência! Sujeito a alteração de preços.`,`https://wa.me/?t
     <button class="btn" style="background:#25D366;color:white" onclick="window.open('${o}','_blank')">💬 WHATSAPP</button>
     <button class="btn" style="background:#ef4444;color:white" onclick="window.close()">✕ FECHAR</button>
   </div>
-  ${d("1ª VIA — ESTABELECIMENTO")}
-  <div class="cut-line">✂ - - - - - - - - - - - RECORTE AQUI - - - - - - - - - - - ✂</div>
-  ${d("2ª VIA — CLIENTE")}
+  ${d("1ª VIA — ESTABELECIMENTO",!0)}
+  <div class="cut-line">✂ &nbsp; - - - - - - - - - - - - - - - RECORTE AQUI - - - - - - - - - - - - - - - &nbsp; ✂</div>
+  ${d("2ª VIA — CLIENTE",!1)}
   </body></html>`;t.document.open(),t.document.write(f),t.document.close()},JU=async e=>{const t=window.open("","_blank","width=420,height=700");if(!t)return;const{companyName:r,companyAddress:n,companyCnpjIe:a,logoSrc:i}=await Fc(),o=await O1(e),{customerName:l,customerDocument:c,cart:u,total:d,discount:f,date:h,validityDays:p,observations:m}=e,g=u.reduce((x,j)=>x+Number(j.quantity),0),y=u.reduce((x,j)=>x+j.price*j.quantity,0),b=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Orçamento - ${l}</title>
   <style>body{font-family:'Courier New',monospace;font-size:13px;font-weight:bold;margin:0;padding:0;max-width:300px;color:#000}
   @media print{@page{margin:0}body{margin:0;padding:0}.no-print{display:none!important}}
