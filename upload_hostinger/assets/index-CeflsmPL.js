@@ -959,10 +959,10 @@ Obrigado pela preferência! Sujeito a alteração de preços.`,`https://wa.me/?t
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0;padding-left:12px">
-          <div class="via-badge">${h}</div>
-          <div style="font-size:12pt;font-weight:900;margin-top:4px">COMPROVANTE DE VENDA</div>
+          <div style="font-size:12pt;font-weight:900">COMPROVANTE DE VENDA</div>
           <div style="font-size:9pt;margin-top:2px"><b>#${e.saleNumber}</b> &nbsp;|&nbsp; ${new Date(e.date).toLocaleString("pt-BR")}</div>
           ${l?`<div style="font-size:9pt;margin-top:2px">Cliente: <b>${l}</b>${c?`<br/><span style="font-size:8pt">CPF/CNPJ: ${c}</span>`:""}</div>`:""}
+          <div class="via-badge" style="margin-top:6px">${h}</div>
         </div>
       </div>
       <table>

@@ -394,10 +394,10 @@ export const printReceiptA4 = async (data: ReceiptData) => {
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0;padding-left:12px">
-          <div class="via-badge">${via}</div>
-          <div style="font-size:12pt;font-weight:900;margin-top:4px">COMPROVANTE DE VENDA</div>
+          <div style="font-size:12pt;font-weight:900">COMPROVANTE DE VENDA</div>
           <div style="font-size:9pt;margin-top:2px"><b>#${data.saleNumber}</b> &nbsp;|&nbsp; ${new Date(data.date).toLocaleString('pt-BR')}</div>
           ${customerName ? `<div style="font-size:9pt;margin-top:2px">Cliente: <b>${customerName}</b>${customerDocument ? `<br/><span style="font-size:8pt">CPF/CNPJ: ${customerDocument}</span>` : ''}</div>` : ''}
+          <div class="via-badge" style="margin-top:6px">${via}</div>
         </div>
       </div>
       <table>
